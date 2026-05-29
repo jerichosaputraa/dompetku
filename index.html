@@ -37,6 +37,13 @@
       const val = value.replace(/\D/g, ''); 
       return val.replace(/\B(?=(\d{3})+(?!\d))/g, "."); 
     };
+    
+    // Fungsi baru untuk mengambil tanggal lokal (Sesuai jam HP/Laptop)
+    const getTodayLocalString = () => {
+      const d = new Date(); 
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
     const getCurrentMonthYear = () => {
       const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     };
@@ -123,7 +130,7 @@
       const [amount, setAmount] = useState('');
       const [description, setDescription] = useState('');
       const [category, setCategory] = useState(categories.expense[0]);
-      const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+      const [date, setDate] = useState(getTodayLocalString());
 
       const [searchTerm, setSearchTerm] = useState('');
       const [filterMonth, setFilterMonth] = useState('all');
@@ -159,7 +166,7 @@
       const [sharedAmount, setSharedAmount] = useState('');
       const [sharedDesc, setSharedDesc] = useState('');
       const [sharedCat, setSharedCat] = useState(categories.expense[0]);
-      const [sharedTxDate, setSharedTxDate] = useState(new Date().toISOString().split('T')[0]);
+      const [sharedTxDate, setSharedTxDate] = useState(getTodayLocalString());
 
       // Dark mode toggle
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
@@ -267,7 +274,12 @@
         const newTx = { type, amount: numericAmount, description, category, date, user_email: user.email };
         const { data, error } = await supabase.from('transactions').insert([newTx]).select();
         if (error) alert("Gagal menyimpan data.");
-        else { setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); setAmount(''); setDescription(''); }
+        else { 
+          setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); 
+          setAmount(''); 
+          setDescription(''); 
+          setDate(getTodayLocalString()); // Reset ke hari ini setelah submit
+        }
         setIsLoading(false);
       };
 
@@ -357,7 +369,12 @@
         const { data, error } = await supabase.from('shared_transactions').insert([newTx]).select();
         
         if (error) alert("Gagal menyimpan transaksi bersama.");
-        else { setSharedTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); setSharedAmount(''); setSharedDesc(''); }
+        else { 
+          setSharedTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); 
+          setSharedAmount(''); 
+          setSharedDesc(''); 
+          setSharedTxDate(getTodayLocalString()); // Reset ke hari ini setelah submit
+        }
         setIsLoading(false);
       };
 
@@ -400,7 +417,7 @@
         const newCurrent = parseFloat(goal.current_amount) + topUpVal;
 
         const { data: updatedData } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
-        const txDate = new Date().toISOString().split('T')[0];
+        const txDate = getTodayLocalString();
         const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, user_email: user.email };
         const { data: txData } = await supabase.from('transactions').insert([newTx]).select();
 
@@ -434,7 +451,7 @@
         setIsLoading(true);
         const currentMonthYear = getCurrentMonthYear();
         const { data: subData, error: err1 } = await supabase.from('subscriptions').update({ last_paid_month: currentMonthYear }).eq('id', sub.id).select();
-        const txDate = new Date().toISOString().split('T')[0];
+        const txDate = getTodayLocalString();
         const newTx = { type: 'expense', amount: sub.amount, description: `Bayar Rutin: ${sub.name}`, category: sub.category, date: txDate, user_email: user.email };
         const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
 
