@@ -245,16 +245,27 @@
         setIsLoading(true);
         const newTx = { type, amount: parseFloat(amount), description, category, date, user_email: user.email };
         const { data, error } = await supabase.from('transactions').insert([newTx]).select();
-        if (!error && data) {
+        
+        if (error) {
+          console.error("Gagal simpan:", error);
+          alert("Gagal menyimpan data ke database.");
+        } else if (data) {
           setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
           setAmount(''); setDescription('');
         }
         setIsLoading(false);
       };
 
+      // Hapus Transaksi
       const handleDelete = async (id) => {
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (!error) setTransactions(transactions.filter(t => t.id !== id));
+        const { data, error } = await supabase.from('transactions').delete().eq('id', id).select();
+        if (error) {
+          console.error("Gagal hapus:", error);
+        } else if (data && data.length === 0) {
+          alert("Gagal menghapus data! Terhalang izin keamanan (RLS) Supabase.");
+        } else {
+          setTransactions(transactions.filter(t => t.id !== id));
+        }
       };
 
       // Kantong Tabungan Handlers
@@ -274,8 +285,14 @@
       };
 
       const handleDeleteGoal = async (id) => {
-        const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-        if (!error) setSavingsGoals(savingsGoals.filter(g => g.id !== id));
+        const { data, error } = await supabase.from('savings_goals').delete().eq('id', id).select();
+        if (error) {
+          console.error("Gagal hapus tabungan:", error);
+        } else if (data && data.length === 0) {
+          alert("Gagal menghapus tabungan! Terhalang izin keamanan (RLS) Supabase.");
+        } else {
+          setSavingsGoals(savingsGoals.filter(g => g.id !== id));
+        }
       };
 
       const handleTopUpSubmit = async (e) => {
@@ -288,7 +305,13 @@
         const newCurrent = parseFloat(goal.current_amount) + topUpVal;
 
         // 1. Update Goal Amount
-        const { error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id);
+        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
+        
+        if (updatedData && updatedData.length === 0) {
+          alert("Gagal memindahkan uang! Terhalang izin keamanan (RLS) di Supabase.");
+          setIsLoading(false);
+          return;
+        }
         
         // 2. Catat sebagai pengeluaran agar balance utama terpotong
         const txDate = new Date().toISOString().split('T')[0];
