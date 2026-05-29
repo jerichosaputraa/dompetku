@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FinansialKu - Pencatat Keuangan</title>
+  <title>FinansialKu - Pencatat Keuangan Ultimate</title>
   
   <!-- 1. Tailwind CSS (Desain Visual) & Konfigurasi Dark Mode -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class', // Mengaktifkan toggle manual untuk dark mode
+      darkMode: 'class',
       theme: { extend: {} }
     }
   </script>
@@ -37,14 +37,12 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect, useRef } = React;
 
-    // Inisialisasi Supabase
     const SUPABASE_URL = 'https://ecoelrgoywqmdiwqasbz.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjb2VscmdveXdxbWRpd3Fhc2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzQzODcsImV4cCI6MjA5NTYxMDM4N30.KL0brutSStLZHV80cOnEZ43DiC8_es25no8SlDkZTIA';
     
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const isSupabaseConfigured = true;
 
-    // --- Format Bantuan ---
     const formatRupiah = (number) => {
       return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
     };
@@ -53,9 +51,10 @@
       return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     };
 
+    // Kategori diperbarui: Menambahkan "Tabungan" di pengeluaran
     const categories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
-      expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Lainnya']
+      expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Lainnya']
     };
 
     const getCategoryIcon = (category, type) => {
@@ -68,28 +67,22 @@
         case 'Transportasi': return <i className="fa-solid fa-car text-xl"></i>;
         case 'Belanja': return <i className="fa-solid fa-bag-shopping text-xl"></i>;
         case 'Tagihan': return <i className="fa-solid fa-house text-xl"></i>;
+        case 'Tabungan': return <i className="fa-solid fa-piggy-bank text-xl"></i>;
         default: return <i className="fa-solid fa-tag text-xl"></i>;
       }
     };
 
-    // --- Komponen Grafik Donat ---
     function TransactionChart({ transactions, type, isDarkMode }) {
       const canvasRef = useRef(null);
       const chartRef = useRef(null);
 
       useEffect(() => {
         if (!canvasRef.current) return;
-        
         const filtered = transactions.filter(t => t.type === type);
         
-        // Hapus chart lama jika ada
-        if (chartRef.current) {
-          chartRef.current.destroy();
-        }
-
+        if (chartRef.current) chartRef.current.destroy();
         if (filtered.length === 0) return;
 
-        // Kelompokkan nominal berdasarkan kategori
         const dataMap = {};
         filtered.forEach(t => {
           dataMap[t.category] = (dataMap[t.category] || 0) + parseFloat(t.amount);
@@ -97,11 +90,9 @@
 
         const labels = Object.keys(dataMap);
         const dataValues = Object.values(dataMap);
-
-        // Palet warna yang modern
         const bgColors = type === 'expense' 
-          ? ['#f43f5e', '#8b5cf6', '#3b82f6', '#0ea5e9', '#f59e0b', '#f97316', '#64748b'] // Warna pengeluaran
-          : ['#10b981', '#0ea5e9', '#3b82f6', '#8b5cf6', '#64748b']; // Warna pemasukan
+          ? ['#f43f5e', '#8b5cf6', '#3b82f6', '#0ea5e9', '#f59e0b', '#f97316', '#64748b', '#10b981'] 
+          : ['#10b981', '#0ea5e9', '#3b82f6', '#8b5cf6', '#64748b'];
 
         const ctx = canvasRef.current.getContext('2d');
         chartRef.current = new window.Chart(ctx, {
@@ -109,66 +100,45 @@
           data: {
             labels: labels,
             datasets: [{
-              data: dataValues,
-              backgroundColor: bgColors,
-              borderWidth: 2,
-              borderColor: isDarkMode ? '#1e293b' : '#ffffff', // Menyesuaikan warna garis batas
-              hoverOffset: 4
+              data: dataValues, backgroundColor: bgColors,
+              borderWidth: 2, borderColor: isDarkMode ? '#1e293b' : '#ffffff', hoverOffset: 4
             }]
           },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: {
-              legend: {
-                position: 'right',
-                labels: { color: isDarkMode ? '#cbd5e1' : '#475569', font: { family: 'sans-serif' } }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    let label = context.label || '';
-                    if (label) { label += ': '; }
-                    if (context.parsed !== null) { label += formatRupiah(context.parsed); }
-                    return label;
-                  }
-                }
-              }
+              legend: { position: 'right', labels: { color: isDarkMode ? '#cbd5e1' : '#475569', font: { family: 'sans-serif' } } },
+              tooltip: { callbacks: { label: function(c) { return `${c.label}: ${formatRupiah(c.parsed)}`; } } }
             }
           }
         });
 
-        return () => {
-          if (chartRef.current) chartRef.current.destroy();
-        };
+        return () => { if (chartRef.current) chartRef.current.destroy(); };
       }, [transactions, type, isDarkMode]);
 
       const hasData = transactions.filter(t => t.type === type).length > 0;
-
       return (
         <div className="h-48 w-full flex items-center justify-center">
-          {!hasData ? (
-            <p className="text-slate-400 dark:text-slate-500 text-sm italic">Belum ada data {type === 'expense' ? 'pengeluaran' : 'pemasukan'}.</p>
-          ) : (
-            <canvas ref={canvasRef}></canvas>
-          )}
+          {!hasData ? <p className="text-slate-400 dark:text-slate-500 text-sm italic">Belum ada data {type === 'expense' ? 'pengeluaran' : 'pemasukan'}.</p> : <canvas ref={canvasRef}></canvas>}
         </div>
       );
     }
 
     function App() {
-      // State Aplikasi
+      // Autentikasi & Core State
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [authMode, setAuthMode] = useState('login'); 
       const [email, setEmail] = useState('');
       const [password, setPassword] = useState('');
       const [name, setName] = useState('');
       const [authMessage, setAuthMessage] = useState({ text: '', type: '' });
-      
       const [user, setUser] = useState(null);
       const [isLoading, setIsLoading] = useState(false);
 
-      // State Transaksi & Form
+      // Navigasi Utama (Beranda / Tabungan)
+      const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' atau 'savings'
+
+      // Transaksi State
       const [transactions, setTransactions] = useState([]);
       const [type, setType] = useState('expense');
       const [amount, setAmount] = useState('');
@@ -176,73 +146,57 @@
       const [category, setCategory] = useState(categories.expense[0]);
       const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-      // State Filter & Pencarian
+      // Filter State
       const [searchTerm, setSearchTerm] = useState('');
       const [filterMonth, setFilterMonth] = useState('all');
       const [filterYear, setFilterYear] = useState('all');
 
-      // State Dark Mode
-      const [isDarkMode, setIsDarkMode] = useState(() => {
-        // Cek apakah sebelumnya user pernah memilih dark mode
-        const savedMode = localStorage.getItem('darkMode');
-        return savedMode === 'true';
-      });
+      // Kantong Tabungan State
+      const [savingsGoals, setSavingsGoals] = useState([]);
+      const [goalTitle, setGoalTitle] = useState('');
+      const [goalTarget, setGoalTarget] = useState('');
+      const [goalDeadline, setGoalDeadline] = useState('');
+      
+      // TopUp Modal State
+      const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
+      const [topUpAmount, setTopUpAmount] = useState('');
 
-      // Efek: Handle Dark Mode Toggle
+      // Dark Mode
+      const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
+
       useEffect(() => {
-        if (isDarkMode) {
-          document.documentElement.classList.add('dark');
-          localStorage.setItem('darkMode', 'true');
-        } else {
-          document.documentElement.classList.remove('dark');
-          localStorage.setItem('darkMode', 'false');
-        }
+        if (isDarkMode) { document.documentElement.classList.add('dark'); localStorage.setItem('darkMode', 'true'); } 
+        else { document.documentElement.classList.remove('dark'); localStorage.setItem('darkMode', 'false'); }
       }, [isDarkMode]);
 
-      // 1. Cek Sesi Login saat website dibuka
       useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session) {
-            setUser(session.user);
-            setIsLoggedIn(true);
-          }
+          if (session) { setUser(session.user); setIsLoggedIn(true); }
         });
-
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (session) {
-            setUser(session.user);
-            setIsLoggedIn(true);
-          } else {
-            setUser(null);
-            setIsLoggedIn(false);
-          }
+          if (session) { setUser(session.user); setIsLoggedIn(true); } 
+          else { setUser(null); setIsLoggedIn(false); }
         });
-
         return () => subscription.unsubscribe();
       }, []);
 
-      // 2. Ambil Data Transaksi dari Supabase jika sudah login
       useEffect(() => {
         if (!isLoggedIn || !user) return;
-        
-        const fetchTransactions = async () => {
+        const fetchData = async () => {
           setIsLoading(true);
-          const { data, error } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('user_email', user.email)
-            .order('date', { ascending: false });
-
-          if (error) console.error("Error ambil data:", error);
-          else if (data) setTransactions(data);
+          // Ambil Transaksi
+          const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+          if (txRes.data) setTransactions(txRes.data);
+          
+          // Ambil Kantong Tabungan
+          const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+          if (svRes.data) setSavingsGoals(svRes.data);
           
           setIsLoading(false);
         };
-
-        fetchTransactions();
+        fetchData();
       }, [isLoggedIn, user]);
 
-      // 3. Logika Filter & Pencarian
       const availableYears = useMemo(() => {
         const years = transactions.map(t => new Date(t.date).getFullYear());
         return [...new Set(years)].sort((a, b) => b - a);
@@ -250,193 +204,157 @@
 
       const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
-          const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                t.category.toLowerCase().includes(searchTerm.toLowerCase());
-          
+          const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || t.category.toLowerCase().includes(searchTerm.toLowerCase());
           const txDate = new Date(t.date);
           const txMonth = (txDate.getMonth() + 1).toString().padStart(2, '0');
           const txYear = txDate.getFullYear().toString();
-
           const matchesMonth = filterMonth === 'all' || txMonth === filterMonth;
           const matchesYear = filterYear === 'all' || txYear === filterYear;
-
           return matchesSearch && matchesMonth && matchesYear;
         });
       }, [transactions, searchTerm, filterMonth, filterYear]);
 
-      // Kalkulasi Uang berdasarkan data yang sudah di-filter
       const { totalIncome, totalExpense, balance } = useMemo(() => {
         return filteredTransactions.reduce((acc, curr) => {
           const numAmount = parseFloat(curr.amount);
-          if (curr.type === 'income') {
-            acc.totalIncome += numAmount; acc.balance += numAmount;
-          } else {
-            acc.totalExpense += numAmount; acc.balance -= numAmount;
-          }
+          if (curr.type === 'income') { acc.totalIncome += numAmount; acc.balance += numAmount; } 
+          else { acc.totalExpense += numAmount; acc.balance -= numAmount; }
           return acc;
         }, { totalIncome: 0, totalExpense: 0, balance: 0 });
       }, [filteredTransactions]);
 
-      // Handle Export CSV
+      const totalSavingsCollected = useMemo(() => {
+        return savingsGoals.reduce((sum, goal) => sum + parseFloat(goal.current_amount || 0), 0);
+      }, [savingsGoals]);
+
       const handleExportCSV = () => {
-        if (filteredTransactions.length === 0) {
-          alert("Tidak ada data untuk diexport!");
-          return;
-        }
-
+        if (filteredTransactions.length === 0) return;
         const headers = ['Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'];
-        const csvRows = filteredTransactions.map(t => [
-          t.date,
-          t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
-          t.category,
-          `"${t.description}"`, 
-          t.amount
-        ]);
-
+        const csvRows = filteredTransactions.map(t => [ t.date, t.type === 'income' ? 'Pemasukan' : 'Pengeluaran', t.category, `"${t.description}"`, t.amount ]);
         const csvContent = headers.join(',') + '\n' + csvRows.map(row => row.join(',')).join('\n');
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Laporan_FinansialKu_${filterMonth}_${filterYear}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        link.href = URL.createObjectURL(blob);
+        link.download = `Laporan_FinansialKu_${filterMonth}_${filterYear}.csv`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
-      // Simpan Transaksi Baru
       const handleSubmit = async (e) => {
         e.preventDefault();
         if (!amount || !description || !category || !date) return;
-
         setIsLoading(true);
-        const newTransaction = {
-          type, 
-          amount: parseFloat(amount), 
-          description, 
-          category, 
-          date,
-          user_email: user.email
-        };
-
-        const { data, error } = await supabase
-          .from('transactions')
-          .insert([newTransaction])
-          .select();
-
-        if (error) {
-          console.error("Gagal simpan:", error);
-          alert("Gagal menyimpan data. Pastikan tabel 'transactions' sudah dibuat di Supabase.");
-        } else if (data) {
+        const newTx = { type, amount: parseFloat(amount), description, category, date, user_email: user.email };
+        const { data, error } = await supabase.from('transactions').insert([newTx]).select();
+        if (!error && data) {
           setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
           setAmount(''); setDescription('');
         }
         setIsLoading(false);
       };
 
-      // Hapus Transaksi
       const handleDelete = async (id) => {
         const { error } = await supabase.from('transactions').delete().eq('id', id);
         if (!error) setTransactions(transactions.filter(t => t.id !== id));
       };
 
-      // Proses Login / Daftar
+      // Kantong Tabungan Handlers
+      const handleCreateGoal = async (e) => {
+        e.preventDefault();
+        if (!goalTitle || !goalTarget) return;
+        setIsLoading(true);
+        const newGoal = { title: goalTitle, target_amount: parseFloat(goalTarget), current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
+        const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
+        if (!error && data) {
+          setSavingsGoals([...savingsGoals, data[0]]);
+          setGoalTitle(''); setGoalTarget(''); setGoalDeadline('');
+        } else {
+          console.error("Gagal buat tabungan:", error);
+        }
+        setIsLoading(false);
+      };
+
+      const handleDeleteGoal = async (id) => {
+        const { error } = await supabase.from('savings_goals').delete().eq('id', id);
+        if (!error) setSavingsGoals(savingsGoals.filter(g => g.id !== id));
+      };
+
+      const handleTopUpSubmit = async (e) => {
+        e.preventDefault();
+        const topUpVal = parseFloat(topUpAmount);
+        if (!topUpVal || topUpVal <= 0) return;
+        
+        setIsLoading(true);
+        const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
+        const newCurrent = parseFloat(goal.current_amount) + topUpVal;
+
+        // 1. Update Goal Amount
+        const { error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id);
+        
+        // 2. Catat sebagai pengeluaran agar balance utama terpotong
+        const txDate = new Date().toISOString().split('T')[0];
+        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, user_email: user.email };
+        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+
+        if (!err1 && !err2) {
+          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
+          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' });
+          setTopUpAmount('');
+        }
+        setIsLoading(false);
+      };
+
       const handleAuth = async (e) => {
         e.preventDefault();
         setAuthMessage({ text: '', type: '' });
         setIsLoading(true);
-
         try {
           if (authMode === 'register') {
-            const { data, error } = await supabase.auth.signUp({
-              email, password, options: { data: { name } }
-            });
-            
+            const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
             if (error) throw error;
-            if (!data.user) {
-              throw new Error("Pendaftaran ditolak oleh sistem. Cek pengaturan Email di Supabase.");
-            }
-
+            if (!data.user) throw new Error("Pendaftaran ditolak oleh sistem.");
             setAuthMessage({ text: 'Pendaftaran berhasil! Silakan login.', type: 'success' });
             setAuthMode('login');
           } else {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
           }
-        } catch (err) {
-          console.error("Auth Error:", err);
-          setAuthMessage({ text: "Gagal: " + err.message, type: 'error' });
-        }
-        
+        } catch (err) { setAuthMessage({ text: err.message, type: 'error' }); }
         setIsLoading(false);
       };
 
-      const handleLogout = async () => {
-        await supabase.auth.signOut();
-      };
-
-      // TAMPILAN JIKA BELUM LOGIN
       if (!isLoggedIn) {
         return (
           <div className="min-h-screen flex items-center justify-center p-4">
-            {/* Tombol Dark Mode Absolute */}
-            <div className="absolute top-4 right-4">
-              <button 
-                onClick={() => setIsDarkMode(!isDarkMode)} 
-                className="p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
-                title="Ganti Tema"
-              >
-                {isDarkMode ? <i className="fa-solid fa-sun"></i> : <i className="fa-solid fa-moon"></i>}
-              </button>
-            </div>
-
-            <div className="bg-white dark:bg-slate-800 max-w-md w-full rounded-3xl shadow-xl shadow-slate-200 dark:shadow-none border border-slate-100 dark:border-slate-700 overflow-hidden relative transition-colors">
-              {authMessage.text && (
-                <div className={`absolute top-0 left-0 right-0 p-3 text-sm text-center font-medium ${authMessage.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                  {authMessage.text}
-                </div>
-              )}
+            <div className="absolute top-4 right-4"><button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition-colors"><i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i></button></div>
+            <div className="bg-white dark:bg-slate-800 max-w-md w-full rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden relative transition-colors">
+              {authMessage.text && <div className={`absolute top-0 left-0 right-0 p-3 text-sm text-center font-medium ${authMessage.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>{authMessage.text}</div>}
               <div className="bg-indigo-600 dark:bg-indigo-700 p-8 pt-12 text-center text-white">
-                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                  <i className="fa-solid fa-wallet text-3xl text-white"></i>
-                </div>
+                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm"><i className="fa-solid fa-wallet text-3xl"></i></div>
                 <h1 className="text-2xl font-bold tracking-tight">FinansialKu</h1>
                 <p className="text-indigo-200 mt-2 text-sm">Masuk untuk mencatat keuangan Anda</p>
               </div>
-              
               <div className="p-8">
                 <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl mb-6">
-                  <button onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Masuk</button>
-                  <button onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Daftar</button>
+                  <button onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Masuk</button>
+                  <button onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Daftar</button>
                 </div>
-
                 <form onSubmit={handleAuth} className="space-y-4">
                   {authMode === 'register' && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-user text-slate-400 dark:text-slate-500"></i></div>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nama Anda" />
-                      </div>
+                      <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="Nama Anda" />
                     </div>
                   )}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-envelope text-slate-400 dark:text-slate-500"></i></div>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="nama@email.com" />
-                    </div>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="nama@email.com" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kata Sandi</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-lock text-slate-400 dark:text-slate-500"></i></div>
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Minimal 6 karakter" />
-                    </div>
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="Minimal 6 karakter" />
                   </div>
-                  <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    {isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (authMode === 'login' ? 'Masuk ke Akun' : 'Buat Akun Sekarang')}
-                  </button>
+                  <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 text-white font-medium py-3 px-4 rounded-xl">{isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (authMode === 'login' ? 'Masuk' : 'Buat Akun')}</button>
                 </form>
               </div>
             </div>
@@ -444,220 +362,244 @@
         );
       }
 
-      // TAMPILAN JIKA SUDAH LOGIN (DASHBOARD)
       return (
-        <div className="min-h-screen pb-12 transition-colors">
-          {/* --- Header --- */}
-          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 transition-colors">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="bg-indigo-600 dark:bg-indigo-500 p-2 rounded-xl text-white"><i className="fa-solid fa-wallet text-xl"></i></div>
-                <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
+        <div className="min-h-screen pb-12 transition-colors relative">
+          
+          {/* Modal Top Up Tabungan */}
+          {topUpModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Anda akan memindahkan saldo utama ke kantong <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
+                    <input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} required min="1" className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: 100000" />
+                  </div>
+                  <div className="flex gap-3 mt-8">
+                    <button type="button" onClick={() => setTopUpModal({isOpen: false})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 font-medium transition-colors">Batal</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium transition-colors">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Uang'}</button>
+                  </div>
+                </form>
               </div>
-              <div className="flex items-center gap-2 sm:gap-4">
-                <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
-                  Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
+            </div>
+          )}
+
+          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors shadow-sm">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="h-16 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="bg-indigo-600 dark:bg-indigo-500 p-2 rounded-xl text-white"><i className="fa-solid fa-wallet text-xl"></i></div>
+                  <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
                 </div>
-                {/* Tombol Toggle Dark Mode */}
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)} 
-                  className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  title="Ganti Tema"
-                >
-                  {isDarkMode ? <i className="fa-solid fa-sun text-lg"></i> : <i className="fa-solid fa-moon text-lg"></i>}
-                </button>
-                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
-                {/* Tombol Logout */}
-                <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2" title="Keluar">
-                  <i className="fa-solid fa-right-from-bracket text-lg"></i>
-                  <span className="hidden sm:inline text-sm font-medium">Keluar</span>
-                </button>
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
+                    Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
+                  </div>
+                  <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors" title="Ganti Tema">
+                    {isDarkMode ? <i className="fa-solid fa-sun text-lg"></i> : <i className="fa-solid fa-moon text-lg"></i>}
+                  </button>
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                  <button onClick={() => supabase.auth.signOut()} className="p-2 text-slate-400 hover:text-rose-600 rounded-lg transition-colors flex items-center gap-2">
+                    <i className="fa-solid fa-right-from-bracket text-lg"></i>
+                    <span className="hidden sm:inline text-sm font-medium">Keluar</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Tab Navigasi Bawah Header */}
+              <div className="flex gap-6 mt-1 border-b-2 border-transparent">
+                <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
+                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Target Tabungan</button>
               </div>
             </div>
           </header>
 
           <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
             
-            {/* --- Dashboard Cards --- */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 dark:shadow-none flex flex-col justify-between transition-colors">
-                <div className="flex items-center gap-2 text-indigo-100 mb-2">
-                  <i className="fa-solid fa-wallet text-lg"></i><h2 className="font-medium">Total Saldo</h2>
-                </div>
-                <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
-                  <div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2>
-                </div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalIncome)}</p>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
-                  <div className="bg-rose-100 dark:bg-rose-900/40 p-1.5 rounded-lg text-rose-600 dark:text-rose-400"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2>
-                </div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalExpense)}</p>
-              </div>
-            </div>
-
-            {/* --- Area Grafik / Visualisasi --- */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm mb-8 transition-colors">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                <i className="fa-solid fa-chart-pie text-indigo-600 dark:text-indigo-400"></i> Analisis Kategori
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pengeluaran</h4>
-                  <TransactionChart transactions={filteredTransactions} type="expense" isDarkMode={isDarkMode} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pemasukan</h4>
-                  <TransactionChart transactions={filteredTransactions} type="income" isDarkMode={isDarkMode} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* --- Kolom Kiri: Form Input --- */}
-              <div className="lg:col-span-1">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24 transition-colors">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600 dark:text-indigo-400"></i> Catat Transaksi</h3>
-                  <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl transition-colors">
-                      <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Pengeluaran</button>
-                      <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Pemasukan</button>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-slate-400 font-medium">Rp</span></div>
-                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" required min="1" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-file-lines text-slate-400"></i></div>
-                        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Contoh: Makan siang" required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kategori</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-tag text-slate-400"></i></div>
-                        <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-colors">
-                          {categories[type].map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none"><svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tanggal</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-calendar text-slate-400"></i></div>
-                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
-                      </div>
-                    </div>
-                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
-                      {isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <><i className="fa-solid fa-plus"></i> Simpan Transaksi</>}
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-              {/* --- Kolom Kanan: Riwayat & Filter --- */}
-              <div className="lg:col-span-2">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 transition-colors">
-                  
-                  {/* Header & Export Button */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">Riwayat Transaksi</h3>
-                      <span className="text-sm text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full">{filteredTransactions.length} Data</span>
-                    </div>
-                    <button onClick={handleExportCSV} className="text-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
-                      <i className="fa-solid fa-download"></i> Export CSV
-                    </button>
+            {}
+            {activeTab === 'dashboard' && (
+              <div className="animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-indigo-100 mb-2"><i className="fa-solid fa-wallet text-lg"></i><h2 className="font-medium">Total Saldo Aktif</h2></div>
+                    <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
                   </div>
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-slate-500 mb-2"><div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-600"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2></div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalIncome)}</p>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-slate-500 mb-2"><div className="bg-rose-100 p-1.5 rounded-lg text-rose-600"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2></div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalExpense)}</p>
+                  </div>
+                </div>
 
-                  {/* Filter & Search Bar */}
-                  <div className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700 transition-colors">
-                    {/* Search Input */}
-                    <div className="flex-1 relative">
-                      <i className="fa-solid fa-search absolute left-3 top-3 text-slate-400 dark:text-slate-500"></i>
-                      <input 
-                        type="text" 
-                        placeholder="Cari transaksi (contoh: Nasi Padang)..." 
-                        value={searchTerm} 
-                        onChange={e => setSearchTerm(e.target.value)} 
-                        className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" 
-                      />
-                    </div>
-                    {/* Dropdowns */}
-                    <div className="flex gap-3">
-                      <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none transition-colors">
-                        <option value="all">Semua Bulan</option>
-                        <option value="01">Januari</option>
-                        <option value="02">Februari</option>
-                        <option value="03">Maret</option>
-                        <option value="04">April</option>
-                        <option value="05">Mei</option>
-                        <option value="06">Juni</option>
-                        <option value="07">Juli</option>
-                        <option value="08">Agustus</option>
-                        <option value="09">September</option>
-                        <option value="10">Oktober</option>
-                        <option value="11">November</option>
-                        <option value="12">Desember</option>
-                      </select>
-                      <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none transition-colors">
-                        <option value="all">Semua Tahun</option>
-                        {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-                      </select>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-chart-pie text-indigo-600"></i> Analisis Kategori</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div><h4 className="text-sm font-semibold text-slate-500 text-center mb-4">Pengeluaran</h4><TransactionChart transactions={filteredTransactions} type="expense" isDarkMode={isDarkMode} /></div>
+                    <div><h4 className="text-sm font-semibold text-slate-500 text-center mb-4">Pemasukan</h4><TransactionChart transactions={filteredTransactions} type="income" isDarkMode={isDarkMode} /></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600"></i> Catat Transaksi</h3>
+                      <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                          <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-sm' : 'text-slate-500'}`}>Pengeluaran</button>
+                          <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Pemasukan</button>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
+                          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
+                          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kategori</label>
+                          <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white">
+                            {categories[type].map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tanggal</label>
+                          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Transaksi'}
+                        </button>
+                      </form>
                     </div>
                   </div>
 
-                  {/* List Transaksi */}
-                  {isLoading && transactions.length === 0 ? (
-                    <div className="text-center py-16 px-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
-                      <p className="text-slate-500 dark:text-slate-400 font-medium">Memuat data...</p>
+                  <div className="lg:col-span-2">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Riwayat Transaksi</h3>
+                        <button onClick={handleExportCSV} className="text-sm bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-medium"><i className="fa-solid fa-download"></i> CSV</button>
+                      </div>
+                      <div className="flex gap-3 mb-6 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <input type="text" placeholder="Cari..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm" />
+                        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="px-3 py-2 rounded-lg border dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm"><option value="all">Bulan</option><option value="01">Jan</option><option value="05">Mei</option></select>
+                      </div>
+                      
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar">
+                        {filteredTransactions.map(t => {
+                          const isIncome = t.type === 'income';
+                          return (
+                            <div key={t.id} className="flex justify-between items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 group transition-all">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 flex items-center justify-center rounded-xl ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{getCategoryIcon(t.category, t.type)}</div>
+                                <div><p className="font-semibold text-slate-900 dark:text-white">{t.description}</p><p className="text-xs text-slate-500 mt-1">{t.category} • {formatDate(t.date)}</p></div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <p className={`font-bold ${isIncome ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
+                                <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  ) : filteredTransactions.length === 0 ? (
-                    <div className="text-center py-16 px-4 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-xl transition-colors">
-                      <div className="bg-slate-50 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-file-lines text-slate-300 dark:text-slate-600 text-3xl"></i></div>
-                      <h4 className="text-slate-900 dark:text-white font-medium mb-1">Tidak ada transaksi ditemukan</h4>
-                      <p className="text-slate-500 dark:text-slate-400 text-sm">Coba ubah filter bulan, tahun, atau kata kunci pencarian.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {}
+            {activeTab === 'savings' && (
+              <div className="animate-fade-in">
+                <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                  <div className="relative z-10">
+                    <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
+                    <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">{formatRupiah(totalSavingsCollected)}</h2>
+                    <p className="mt-4 text-emerald-100 text-sm">Uang ini tersimpan aman di luar Saldo Aktif Anda.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Form Buat Target Tabungan */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-bullseye text-emerald-500"></i> Buat Target Baru</h3>
+                      <form onSubmit={handleCreateGoal} className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Impian/Target</label>
+                          <input type="text" value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder="Cth: Liburan ke Jepang" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
+                          <input type="number" value={goalTarget} onChange={(e) => setGoalTarget(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder="Cth: 15000000" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
+                          <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Buat Kantong Tabungan'}
+                        </button>
+                      </form>
                     </div>
-                  ) : (
-                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                      {filteredTransactions.map((t) => {
-                        const isIncome = t.type === 'income';
+                  </div>
+
+                  {/* List Kantong Tabungan */}
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {savingsGoals.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-piggy-bank text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada kantong tabungan</h4>
+                        <p className="text-slate-500 text-sm">Mulai sisihkan uang Anda untuk mencapai impian finansial!</p>
+                      </div>
+                    ) : (
+                      savingsGoals.map(goal => {
+                        const target = parseFloat(goal.target_amount);
+                        const current = parseFloat(goal.current_amount || 0);
+                        const progress = Math.min((current / target) * 100, 100);
+                        const isCompleted = current >= target;
+
                         return (
-                          <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 transition-all gap-4">
-                            <div className="flex items-center gap-4">
-                              <div className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center w-12 h-12 ${isIncome ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400'}`}>
-                                {getCategoryIcon(t.category, t.type)}
-                              </div>
-                              <div>
-                                <p className="text-slate-900 dark:text-white font-semibold">{t.description}</p>
-                                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                                  <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300">{t.category}</span><span>•</span><span>{formatDate(t.date)}</span>
-                                </div>
-                              </div>
+                          <div key={goal.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
+                            <button onClick={() => handleDeleteGoal(goal.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-600'}`}>
+                              <i className={`fa-solid ${isCompleted ? 'fa-trophy' : 'fa-piggy-bank'} text-xl`}></i>
                             </div>
-                            <div className="flex items-center justify-between sm:justify-end gap-6 pl-14 sm:pl-0">
-                              <p className={`font-bold whitespace-nowrap ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
-                              <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/40 p-2 rounded-lg transition-colors sm:opacity-0 group-hover:opacity-100" title="Hapus"><i className="fa-solid fa-trash"></i></button>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{goal.title}</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{goal.deadline ? `Target: ${formatDate(goal.deadline)}` : 'Tanpa batas waktu'}</p>
+                            
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={isCompleted ? 'text-amber-500' : 'text-emerald-600'}>{formatRupiah(current)}</span>
+                              <span className="text-slate-400">{formatRupiah(target)}</span>
                             </div>
+                            
+                            {/* Progress Bar Container */}
+                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
+                              <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+
+                            {isCompleted ? (
+                              <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center">
+                                <i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!
+                              </div>
+                            ) : (
+                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2 border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800">
+                                <i className="fa-solid fa-plus"></i> Isi Tabungan
+                              </button>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
           </main>
         </div>
       );
@@ -668,14 +610,23 @@
   </script>
 
   <style>
-    /* Agar scrollbar terlihat bersih dan menyatu dengan desain Tailwind */
     .custom-scrollbar::-webkit-scrollbar { width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    /* Mode Gelap Scrollbar */
     html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
-    html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
   </style>
 </body>
 </html>
