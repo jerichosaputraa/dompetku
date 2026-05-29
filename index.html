@@ -5,8 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FinansialKu - Pencatat Keuangan</title>
   
-  <!-- 1. Tailwind CSS (Desain Visual) -->
+  <!-- 1. Tailwind CSS (Desain Visual) & Konfigurasi Dark Mode -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class', // Mengaktifkan toggle manual untuk dark mode
+      theme: { extend: {} }
+    }
+  </script>
   
   <!-- 2. FontAwesome (Ikon Visual) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -20,13 +26,16 @@
 
   <!-- 5. Supabase Database -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- 6. Chart.js (Untuk Grafik Visual) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
   
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
+    const { useState, useMemo, useEffect, useRef } = React;
 
     // Inisialisasi Supabase
     const SUPABASE_URL = 'https://ecoelrgoywqmdiwqasbz.supabase.co';
@@ -63,6 +72,90 @@
       }
     };
 
+    // --- Komponen Grafik Donat ---
+    function TransactionChart({ transactions, type, isDarkMode }) {
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        
+        const filtered = transactions.filter(t => t.type === type);
+        
+        // Hapus chart lama jika ada
+        if (chartRef.current) {
+          chartRef.current.destroy();
+        }
+
+        if (filtered.length === 0) return;
+
+        // Kelompokkan nominal berdasarkan kategori
+        const dataMap = {};
+        filtered.forEach(t => {
+          dataMap[t.category] = (dataMap[t.category] || 0) + parseFloat(t.amount);
+        });
+
+        const labels = Object.keys(dataMap);
+        const dataValues = Object.values(dataMap);
+
+        // Palet warna yang modern
+        const bgColors = type === 'expense' 
+          ? ['#f43f5e', '#8b5cf6', '#3b82f6', '#0ea5e9', '#f59e0b', '#f97316', '#64748b'] // Warna pengeluaran
+          : ['#10b981', '#0ea5e9', '#3b82f6', '#8b5cf6', '#64748b']; // Warna pemasukan
+
+        const ctx = canvasRef.current.getContext('2d');
+        chartRef.current = new window.Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: dataValues,
+              backgroundColor: bgColors,
+              borderWidth: 2,
+              borderColor: isDarkMode ? '#1e293b' : '#ffffff', // Menyesuaikan warna garis batas
+              hoverOffset: 4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: { color: isDarkMode ? '#cbd5e1' : '#475569', font: { family: 'sans-serif' } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    let label = context.label || '';
+                    if (label) { label += ': '; }
+                    if (context.parsed !== null) { label += formatRupiah(context.parsed); }
+                    return label;
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        return () => {
+          if (chartRef.current) chartRef.current.destroy();
+        };
+      }, [transactions, type, isDarkMode]);
+
+      const hasData = transactions.filter(t => t.type === type).length > 0;
+
+      return (
+        <div className="h-48 w-full flex items-center justify-center">
+          {!hasData ? (
+            <p className="text-slate-400 dark:text-slate-500 text-sm italic">Belum ada data {type === 'expense' ? 'pengeluaran' : 'pemasukan'}.</p>
+          ) : (
+            <canvas ref={canvasRef}></canvas>
+          )}
+        </div>
+      );
+    }
+
     function App() {
       // State Aplikasi
       const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -87,6 +180,24 @@
       const [searchTerm, setSearchTerm] = useState('');
       const [filterMonth, setFilterMonth] = useState('all');
       const [filterYear, setFilterYear] = useState('all');
+
+      // State Dark Mode
+      const [isDarkMode, setIsDarkMode] = useState(() => {
+        // Cek apakah sebelumnya user pernah memilih dark mode
+        const savedMode = localStorage.getItem('darkMode');
+        return savedMode === 'true';
+      });
+
+      // Efek: Handle Dark Mode Toggle
+      useEffect(() => {
+        if (isDarkMode) {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('darkMode', 'true');
+        } else {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('darkMode', 'false');
+        }
+      }, [isDarkMode]);
 
       // 1. Cek Sesi Login saat website dibuka
       useEffect(() => {
@@ -139,11 +250,9 @@
 
       const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
-          // Pencarian (Cek deskripsi atau kategori)
           const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                 t.category.toLowerCase().includes(searchTerm.toLowerCase());
           
-          // Filter Tanggal
           const txDate = new Date(t.date);
           const txMonth = (txDate.getMonth() + 1).toString().padStart(2, '0');
           const txYear = txDate.getFullYear().toString();
@@ -180,14 +289,11 @@
           t.date,
           t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
           t.category,
-          `"${t.description}"`, // Diberi kutip agar jika ada koma tidak error di Excel
+          `"${t.description}"`, 
           t.amount
         ]);
 
-        // Gabungkan Header dan Data
         const csvContent = headers.join(',') + '\n' + csvRows.map(row => row.join(',')).join('\n');
-        
-        // Buat Blob dan Link untuk Download (BOM \uFEFF agar Excel bisa baca karakter khusus)
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -272,14 +378,25 @@
       // TAMPILAN JIKA BELUM LOGIN
       if (!isLoggedIn) {
         return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-800">
-            <div className="bg-white max-w-md w-full rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden relative">
+          <div className="min-h-screen flex items-center justify-center p-4">
+            {/* Tombol Dark Mode Absolute */}
+            <div className="absolute top-4 right-4">
+              <button 
+                onClick={() => setIsDarkMode(!isDarkMode)} 
+                className="p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+                title="Ganti Tema"
+              >
+                {isDarkMode ? <i className="fa-solid fa-sun"></i> : <i className="fa-solid fa-moon"></i>}
+              </button>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 max-w-md w-full rounded-3xl shadow-xl shadow-slate-200 dark:shadow-none border border-slate-100 dark:border-slate-700 overflow-hidden relative transition-colors">
               {authMessage.text && (
                 <div className={`absolute top-0 left-0 right-0 p-3 text-sm text-center font-medium ${authMessage.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
                   {authMessage.text}
                 </div>
               )}
-              <div className="bg-indigo-600 p-8 pt-12 text-center text-white">
+              <div className="bg-indigo-600 dark:bg-indigo-700 p-8 pt-12 text-center text-white">
                 <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                   <i className="fa-solid fa-wallet text-3xl text-white"></i>
                 </div>
@@ -288,36 +405,36 @@
               </div>
               
               <div className="p-8">
-                <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
-                  <button onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Masuk</button>
-                  <button onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Daftar</button>
+                <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl mb-6">
+                  <button onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Masuk</button>
+                  <button onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Daftar</button>
                 </div>
 
                 <form onSubmit={handleAuth} className="space-y-4">
                   {authMode === 'register' && (
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Lengkap</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label>
                       <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-user text-slate-400"></i></div>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nama Anda" />
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-user text-slate-400 dark:text-slate-500"></i></div>
+                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Nama Anda" />
                       </div>
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-envelope text-slate-400"></i></div>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="nama@email.com" />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-envelope text-slate-400 dark:text-slate-500"></i></div>
+                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="nama@email.com" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Kata Sandi</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kata Sandi</label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-lock text-slate-400"></i></div>
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Minimal 6 karakter" />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-lock text-slate-400 dark:text-slate-500"></i></div>
+                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Minimal 6 karakter" />
                     </div>
                   </div>
-                  <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                  <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
                     {isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (authMode === 'login' ? 'Masuk ke Akun' : 'Buat Akun Sekarang')}
                   </button>
                 </form>
@@ -329,18 +446,29 @@
 
       // TAMPILAN JIKA SUDAH LOGIN (DASHBOARD)
       return (
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
-          <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="min-h-screen pb-12 transition-colors">
+          {/* --- Header --- */}
+          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 transition-colors">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="bg-indigo-600 p-2 rounded-xl text-white"><i className="fa-solid fa-wallet text-xl"></i></div>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">FinansialKu</h1>
+                <div className="bg-indigo-600 dark:bg-indigo-500 p-2 rounded-xl text-white"><i className="fa-solid fa-wallet text-xl"></i></div>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="hidden sm:block text-sm font-medium text-slate-500">
-                  Halo, <span className="text-indigo-600 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
                 </div>
-                <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2" title="Keluar">
+                {/* Tombol Toggle Dark Mode */}
+                <button 
+                  onClick={() => setIsDarkMode(!isDarkMode)} 
+                  className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  title="Ganti Tema"
+                >
+                  {isDarkMode ? <i className="fa-solid fa-sun text-lg"></i> : <i className="fa-solid fa-moon text-lg"></i>}
+                </button>
+                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                {/* Tombol Logout */}
+                <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2" title="Keluar">
                   <i className="fa-solid fa-right-from-bracket text-lg"></i>
                   <span className="hidden sm:inline text-sm font-medium">Keluar</span>
                 </button>
@@ -349,69 +477,88 @@
           </header>
 
           <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+            
+            {/* --- Dashboard Cards --- */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 flex flex-col justify-between transition-all">
+              <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 dark:shadow-none flex flex-col justify-between transition-colors">
                 <div className="flex items-center gap-2 text-indigo-100 mb-2">
                   <i className="fa-solid fa-wallet text-lg"></i><h2 className="font-medium">Total Saldo</h2>
                 </div>
                 <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
               </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all">
-                <div className="flex items-center gap-2 text-slate-500 mb-2">
-                  <div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-600"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+                  <div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalIncome)}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalIncome)}</p>
               </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all">
-                <div className="flex items-center gap-2 text-slate-500 mb-2">
-                  <div className="bg-rose-100 p-1.5 rounded-lg text-rose-600"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between transition-colors">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+                  <div className="bg-rose-100 dark:bg-rose-900/40 p-1.5 rounded-lg text-rose-600 dark:text-rose-400"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalExpense)}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalExpense)}</p>
+              </div>
+            </div>
+
+            {/* --- Area Grafik / Visualisasi --- */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm mb-8 transition-colors">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                <i className="fa-solid fa-chart-pie text-indigo-600 dark:text-indigo-400"></i> Analisis Kategori
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pengeluaran</h4>
+                  <TransactionChart transactions={filteredTransactions} type="expense" isDarkMode={isDarkMode} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pemasukan</h4>
+                  <TransactionChart transactions={filteredTransactions} type="income" isDarkMode={isDarkMode} />
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* --- Kolom Kiri: Form Input --- */}
               <div className="lg:col-span-1">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-24">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600"></i> Catat Transaksi</h3>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24 transition-colors">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600 dark:text-indigo-400"></i> Catat Transaksi</h3>
                   <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="flex p-1 bg-slate-100 rounded-xl">
-                      <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pengeluaran</button>
-                      <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pemasukan</button>
+                    <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl transition-colors">
+                      <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Pengeluaran</button>
+                      <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white'}`}>Pemasukan</button>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nominal (Rp)</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-slate-400 font-medium">Rp</span></div>
-                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" required min="1" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" required min="1" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Keterangan</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-file-lines text-slate-400"></i></div>
-                        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Contoh: Makan siang" required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Contoh: Makan siang" required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kategori</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-tag text-slate-400"></i></div>
-                        <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+                        <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-colors">
                           {categories[type].map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none"><svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg></div>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tanggal</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tanggal</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-calendar text-slate-400"></i></div>
-                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" />
                       </div>
                     </div>
-                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
                       {isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <><i className="fa-solid fa-plus"></i> Simpan Transaksi</>}
                     </button>
                   </form>
@@ -420,35 +567,35 @@
 
               {/* --- Kolom Kanan: Riwayat & Filter --- */}
               <div className="lg:col-span-2">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 transition-colors">
                   
                   {/* Header & Export Button */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-slate-900">Riwayat Transaksi</h3>
-                      <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{filteredTransactions.length} Data</span>
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">Riwayat Transaksi</h3>
+                      <span className="text-sm text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full">{filteredTransactions.length} Data</span>
                     </div>
-                    <button onClick={handleExportCSV} className="text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <button onClick={handleExportCSV} className="text-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
                       <i className="fa-solid fa-download"></i> Export CSV
                     </button>
                   </div>
 
                   {/* Filter & Search Bar */}
-                  <div className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700 transition-colors">
                     {/* Search Input */}
                     <div className="flex-1 relative">
-                      <i className="fa-solid fa-search absolute left-3 top-3 text-slate-400"></i>
+                      <i className="fa-solid fa-search absolute left-3 top-3 text-slate-400 dark:text-slate-500"></i>
                       <input 
                         type="text" 
                         placeholder="Cari transaksi (contoh: Nasi Padang)..." 
                         value={searchTerm} 
                         onChange={e => setSearchTerm(e.target.value)} 
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                        className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" 
                       />
                     </div>
                     {/* Dropdowns */}
                     <div className="flex gap-3">
-                      <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white border border-slate-200 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none">
+                      <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none transition-colors">
                         <option value="all">Semua Bulan</option>
                         <option value="01">Januari</option>
                         <option value="02">Februari</option>
@@ -463,7 +610,7 @@
                         <option value="11">November</option>
                         <option value="12">Desember</option>
                       </select>
-                      <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white border border-slate-200 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none">
+                      <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none transition-colors">
                         <option value="all">Semua Tahun</option>
                         {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
                       </select>
@@ -473,35 +620,35 @@
                   {/* List Transaksi */}
                   {isLoading && transactions.length === 0 ? (
                     <div className="text-center py-16 px-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                      <p className="text-slate-500 font-medium">Memuat data...</p>
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
+                      <p className="text-slate-500 dark:text-slate-400 font-medium">Memuat data...</p>
                     </div>
                   ) : filteredTransactions.length === 0 ? (
-                    <div className="text-center py-16 px-4 border-2 border-dashed border-slate-100 rounded-xl">
-                      <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-file-lines text-slate-300 text-3xl"></i></div>
-                      <h4 className="text-slate-900 font-medium mb-1">Tidak ada transaksi ditemukan</h4>
-                      <p className="text-slate-500 text-sm">Coba ubah filter bulan, tahun, atau kata kunci pencarian.</p>
+                    <div className="text-center py-16 px-4 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-xl transition-colors">
+                      <div className="bg-slate-50 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-file-lines text-slate-300 dark:text-slate-600 text-3xl"></i></div>
+                      <h4 className="text-slate-900 dark:text-white font-medium mb-1">Tidak ada transaksi ditemukan</h4>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm">Coba ubah filter bulan, tahun, atau kata kunci pencarian.</p>
                     </div>
                   ) : (
                     <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                       {filteredTransactions.map((t) => {
                         const isIncome = t.type === 'income';
                         return (
-                          <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all gap-4">
+                          <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 transition-all gap-4">
                             <div className="flex items-center gap-4">
-                              <div className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center w-12 h-12 ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                              <div className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center w-12 h-12 ${isIncome ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400'}`}>
                                 {getCategoryIcon(t.category, t.type)}
                               </div>
                               <div>
-                                <p className="text-slate-900 font-semibold">{t.description}</p>
-                                <div className="flex items-center gap-2 text-sm text-slate-500 mt-0.5">
-                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-xs font-medium">{t.category}</span><span>•</span><span>{formatDate(t.date)}</span>
+                                <p className="text-slate-900 dark:text-white font-semibold">{t.description}</p>
+                                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                                  <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300">{t.category}</span><span>•</span><span>{formatDate(t.date)}</span>
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center justify-between sm:justify-end gap-6 pl-14 sm:pl-0">
-                              <p className={`font-bold whitespace-nowrap ${isIncome ? 'text-emerald-600' : 'text-slate-900'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
-                              <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors sm:opacity-0 group-hover:opacity-100" title="Hapus"><i className="fa-solid fa-trash"></i></button>
+                              <p className={`font-bold whitespace-nowrap ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
+                              <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/40 p-2 rounded-lg transition-colors sm:opacity-0 group-hover:opacity-100" title="Hapus"><i className="fa-solid fa-trash"></i></button>
                             </div>
                           </div>
                         );
@@ -522,19 +669,13 @@
 
   <style>
     /* Agar scrollbar terlihat bersih dan menyatu dengan desain Tailwind */
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: transparent; 
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #cbd5e1; 
-      border-radius: 10px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8; 
-    }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    /* Mode Gelap Scrollbar */
+    html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+    html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
   </style>
 </body>
 </html>
