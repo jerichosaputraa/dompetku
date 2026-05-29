@@ -36,8 +36,8 @@
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjb2VscmdveXdxbWRpd3Fhc2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzQzODcsImV4cCI6MjA5NTYxMDM4N30.KL0brutSStLZHV80cOnEZ43DiC8_es25no8SlDkZTIA';
     
     // Inisialisasi Supabase
-    let supabase = null;
-    let isSupabaseConfigured = SUPABASE_URL !== 'https://ecoelrgoywqmdiwqasbz.supabase.co';
+    let supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let isSupabaseConfigured = true;
     
     if (isSupabaseConfigured) {
       supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
