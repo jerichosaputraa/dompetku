@@ -416,4 +416,492 @@
             const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
             if (error) throw error;
             if (!data.user) throw new Error("Pendaftaran ditolak sistem.");
-            setAuthMessage({ text
+            setAuthMessage({ text: 'Pendaftaran berhasil! Silakan login.', type: 'success' });
+            setAuthMode('login');
+          } else {
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+          }
+        } catch (err) { setAuthMessage({ text: err.message, type: 'error' }); }
+        setIsLoading(false);
+      };
+
+      if (!isLoggedIn) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="absolute top-4 right-4"><button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition-colors"><i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i></button></div>
+            <div className="bg-white dark:bg-slate-800 max-w-md w-full rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden relative transition-colors">
+              {authMessage.text && <div className={`absolute top-0 left-0 right-0 p-3 text-sm text-center font-medium ${authMessage.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>{authMessage.text}</div>}
+              <div className="bg-indigo-600 dark:bg-indigo-700 p-8 pt-12 text-center text-white">
+                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm"><i className="fa-solid fa-wallet text-3xl"></i></div>
+                <h1 className="text-2xl font-bold tracking-tight">FinansialKu</h1>
+                <p className="text-indigo-200 mt-2 text-sm">Masuk untuk mencatat keuangan Anda</p>
+              </div>
+              <div className="p-8">
+                <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl mb-6">
+                  <button onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Masuk</button>
+                  <button onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Daftar</button>
+                </div>
+                <form onSubmit={handleAuth} className="space-y-4">
+                  {authMode === 'register' && (
+                    <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="Nama Anda" /></div>
+                  )}
+                  <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="nama@email.com" /></div>
+                  <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kata Sandi</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="Minimal 6 karakter" /></div>
+                  <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl">{isLoading ? <i className="fa-solid fa-circle-notch fa-spin"></i> : (authMode === 'login' ? 'Masuk' : 'Buat Akun')}</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen pb-12 transition-colors relative">
+          
+          {/* Modal Tabungan */}
+          {topUpModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Anda akan memindahkan saldo utama ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
+                    <input type="text" inputMode="numeric" value={topUpAmount} onChange={(e) => setTopUpAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="100.000" />
+                  </div>
+                  <div className="flex gap-3 mt-8">
+                    <button type="button" onClick={() => setTopUpModal({isOpen: false})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Uang'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors shadow-sm">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="h-16 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="bg-indigo-600 dark:bg-indigo-500 p-2 rounded-xl text-white"><i className="fa-solid fa-wallet text-xl"></i></div>
+                  <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
+                    Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
+                  </div>
+                  <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg"><i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-lg`}></i></button>
+                  <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                  <button onClick={() => supabase.auth.signOut()} className="p-2 text-slate-400 hover:text-rose-600 rounded-lg flex items-center gap-2"><i className="fa-solid fa-right-from-bracket text-lg"></i><span className="hidden sm:inline text-sm font-medium">Keluar</span></button>
+                </div>
+              </div>
+              
+              <div className="flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
+                <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
+                <button onClick={() => setActiveTab('shared')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'shared' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-users mr-1.5"></i> Dompet Bersama</button>
+                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
+                <button onClick={() => setActiveTab('subscriptions')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'subscriptions' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-calendar-check mr-1.5"></i> Tagihan Rutin</button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+            
+            {}
+            {activeTab === 'dashboard' && (
+              <div className="animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-6 text-white shadow-lg flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-indigo-100 mb-2"><i className="fa-solid fa-wallet text-lg"></i><h2 className="font-medium">Total Saldo Aktif</h2></div>
+                    <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2></div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalIncome)}</p>
+                  </div>
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-rose-100 dark:bg-rose-900/40 p-1.5 rounded-lg text-rose-600"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2></div>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalExpense)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-chart-pie text-indigo-600"></i> Analisis Kategori</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div><h4 className="text-sm font-semibold text-slate-500 text-center mb-4">Pengeluaran</h4><TransactionChart transactions={filteredTransactions} type="expense" isDarkMode={isDarkMode} /></div>
+                    <div><h4 className="text-sm font-semibold text-slate-500 text-center mb-4">Pemasukan</h4><TransactionChart transactions={filteredTransactions} type="income" isDarkMode={isDarkMode} /></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600"></i> Catat Transaksi</h3>
+                      <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                          <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-sm' : 'text-slate-500'}`}>Pengeluaran</button>
+                          <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Pemasukan</button>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
+                          <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
+                          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kategori</label>
+                          <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                            {categories[type].map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tanggal</label>
+                          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Transaksi'}</button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6">
+                      <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">Riwayat <span className="text-sm bg-slate-100 dark:bg-slate-700 text-slate-500 px-3 py-1 rounded-full">{filteredTransactions.length} Data</span></h3>
+                        <button onClick={handleExportCSV} className="text-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 px-4 py-2 rounded-lg font-medium"><i className="fa-solid fa-download"></i> Export CSV</button>
+                      </div>
+
+                      <div className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <div className="flex-1 relative">
+                          <i className="fa-solid fa-search absolute left-3 top-3 text-slate-400"></i>
+                          <input type="text" placeholder="Cari transaksi..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" />
+                        </div>
+                        <div className="flex gap-3">
+                          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3">
+                            <option value="all">Semua Bulan</option><option value="01">Jan</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Apr</option><option value="05">Mei</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ags</option><option value="09">Sep</option><option value="10">Okt</option><option value="11">Nov</option><option value="12">Des</option>
+                          </select>
+                          <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm py-2 px-3">
+                            <option value="all">Semua Tahun</option>{availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                        {filteredTransactions.length === 0 ? (
+                          <div className="text-center py-16 text-slate-500">Tidak ada transaksi ditemukan.</div>
+                        ) : filteredTransactions.map(t => {
+                          const isIncome = t.type === 'income';
+                          return (
+                            <div key={t.id} className="flex justify-between items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 group">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 flex justify-center items-center rounded-xl ${isIncome ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'}`}>{getCategoryIcon(t.category, t.type)}</div>
+                                <div><p className="font-semibold text-slate-900 dark:text-white">{t.description}</p><p className="text-xs text-slate-500 mt-0.5"><span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">{t.category}</span> • {formatDate(t.date)}</p></div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <p className={`font-bold ${isIncome ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
+                                <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {}
+            {activeTab === 'shared' && (
+              <div className="animate-fade-in">
+                
+                {/* JIKA BELUM PUNYA DOMPET BERSAMA */}
+                {!sharedWallet ? (
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-8 text-center max-w-2xl mx-auto shadow-sm">
+                    <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <i className="fa-solid fa-users text-4xl"></i>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Dompet Bersama</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mb-8">Kelola uang kas, patungan liburan, atau keuangan rumah tangga bersama-sama secara transparan.</p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-left">
+                      {/* Form Buat Dompet */}
+                      <form onSubmit={createSharedWallet} className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-4"><i className="fa-solid fa-plus-circle text-indigo-600 mr-2"></i> Buat Dompet Baru</h3>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Dompet</label>
+                        <input type="text" value={newSharedName} onChange={e => setNewSharedName(e.target.value)} required placeholder="Contoh: Kas RT 01" className="w-full px-4 py-2.5 mb-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" />
+                        <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-medium">{isLoading ? 'Memproses...' : 'Buat Sekarang'}</button>
+                      </form>
+
+                      {/* Form Gabung Dompet */}
+                      <form onSubmit={joinSharedWallet} className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-4"><i className="fa-solid fa-link text-emerald-600 mr-2"></i> Gabung ke Dompet</h3>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kode Gabung (6 Karakter)</label>
+                        <input type="text" value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value.toUpperCase())} maxLength="6" required placeholder="Contoh: X7B9K2" className="w-full px-4 py-2.5 mb-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 uppercase font-mono tracking-widest text-center" />
+                        <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-medium">{isLoading ? 'Memproses...' : 'Gabung'}</button>
+                      </form>
+                    </div>
+                  </div>
+                ) : (
+                  
+                  /* JIKA SUDAH PUNYA DOMPET BERSAMA */
+                  <div>
+                    {/* Header Dompet Bersama */}
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-6 sm:p-8 text-white shadow-lg mb-8 relative overflow-hidden flex flex-col sm:flex-row justify-between items-center gap-6">
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3"></div>
+                      <div className="relative z-10 text-center sm:text-left">
+                        <p className="text-indigo-200 font-medium mb-1 text-sm uppercase tracking-wider">Dompet Aktif</p>
+                        <h2 className="text-3xl font-bold mb-4">{sharedWallet.name}</h2>
+                        <div className="inline-flex items-center gap-3 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
+                          <span className="text-sm font-medium">Kode Gabung:</span>
+                          <span className="font-mono font-bold tracking-widest text-lg">{sharedWallet.join_code}</span>
+                          <button onClick={() => {navigator.clipboard.writeText(sharedWallet.join_code); alert("Kode disalin!");}} className="hover:text-indigo-200 ml-2" title="Salin Kode"><i className="fa-regular fa-copy"></i></button>
+                        </div>
+                      </div>
+                      <div className="relative z-10 w-full sm:w-auto">
+                         <button onClick={leaveSharedWallet} className="w-full sm:w-auto px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/30 rounded-xl font-medium transition-colors"><i className="fa-solid fa-door-open mr-2"></i> Keluar Dompet</button>
+                      </div>
+                    </div>
+
+                    {/* Ringkasan Uang Bersama */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><i className="fa-solid fa-users text-lg"></i><h2 className="font-medium">Total Uang Bersama</h2></div>
+                        <p className="text-3xl font-bold text-slate-900 dark:text-white">{formatRupiah(sharedBalance)}</p>
+                      </div>
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Total Terkumpul</h2></div>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(sharedIncome)}</p>
+                      </div>
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-rose-100 dark:bg-rose-900/40 p-1.5 rounded-lg text-rose-600"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Total Terpakai</h2></div>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(sharedExpense)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      {/* Form Input Dompet Bersama */}
+                      <div className="lg:col-span-1">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-pen-to-square text-indigo-600"></i> Catat Transaksi Bersama</h3>
+                          <form onSubmit={submitSharedTransaction} className="space-y-5">
+                            <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl">
+                              <button type="button" onClick={() => {setSharedType('expense'); setSharedCat(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg ${sharedType === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-sm' : 'text-slate-500'}`}>Uang Keluar</button>
+                              <button type="button" onClick={() => {setSharedType('income'); setSharedCat(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg ${sharedType === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Uang Masuk</button>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
+                              <input type="text" inputMode="numeric" value={sharedAmount} onChange={(e) => setSharedAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
+                              <input type="text" value={sharedDesc} onChange={(e) => setSharedDesc(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kategori</label>
+                              <select value={sharedCat} onChange={(e) => setSharedCat(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                                {categories[sharedType].map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tanggal</label>
+                              <input type="date" value={sharedTxDate} onChange={(e) => setSharedTxDate(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                            </div>
+                            <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Catat di Dompet Bersama'}</button>
+                          </form>
+                        </div>
+                      </div>
+
+                      {/* Riwayat Dompet Bersama */}
+                      <div className="lg:col-span-2">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6">
+                          <div className="flex justify-between mb-6">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">Riwayat Bersama</h3>
+                            <span className="text-sm bg-slate-100 dark:bg-slate-700 text-slate-500 px-3 py-1 rounded-full">{sharedTransactions.length} Data</span>
+                          </div>
+
+                          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                            {sharedTransactions.length === 0 ? (
+                              <div className="text-center py-16 text-slate-500">Belum ada transaksi di dompet ini.</div>
+                            ) : sharedTransactions.map(t => {
+                              const isIncome = t.type === 'income';
+                              const isMe = t.user_email === user.email;
+                              return (
+                                <div key={t.id} className="flex justify-between items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 group">
+                                  <div className="flex items-center gap-4">
+                                    <div className={`w-12 h-12 flex justify-center items-center rounded-xl ${isIncome ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'}`}>{getCategoryIcon(t.category, t.type)}</div>
+                                    <div>
+                                      <p className="font-semibold text-slate-900 dark:text-white">{t.description}</p>
+                                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                                        <span className={`px-2 py-0.5 rounded-md font-medium ${isMe ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                                          <i className="fa-solid fa-user mr-1"></i> {isMe ? 'Saya' : t.user_email.split('@')[0]}
+                                        </span>
+                                        <span>•</span><span>{formatDate(t.date)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <p className={`font-bold ${isIncome ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
+                                    {isMe && <button onClick={() => deleteSharedTransaction(t.id)} className="text-slate-400 hover:text-rose-600 p-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {}
+            {activeTab === 'savings' && (
+              <div className="animate-fade-in">
+                <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                  <div className="relative z-10">
+                    <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
+                    <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">{formatRupiah(totalSavingsCollected)}</h2>
+                    <p className="mt-4 text-emerald-100 text-sm">Uang ini tersimpan aman di luar Saldo Aktif Anda.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-bullseye text-emerald-500"></i> Buat Target Baru</h3>
+                      <form onSubmit={handleCreateGoal} className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Impian/Target</label>
+                          <input type="text" value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="Cth: Liburan ke Jepang" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
+                          <input type="text" inputMode="numeric" value={goalTarget} onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="15.000.000" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Batas Waktu (Opsional)</label>
+                          <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Buat Kantong'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {savingsGoals.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-piggy-bank text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada kantong tabungan</h4>
+                      </div>
+                    ) : (
+                      savingsGoals.map(goal => {
+                        const target = parseFloat(goal.target_amount);
+                        const current = parseFloat(goal.current_amount || 0);
+                        const progress = Math.min((current / target) * 100, 100);
+                        const isCompleted = current >= target;
+
+                        return (
+                          <div key={goal.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
+                            <button onClick={() => handleDeleteGoal(goal.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-600'}`}>
+                              <i className={`fa-solid ${isCompleted ? 'fa-trophy' : 'fa-piggy-bank'} text-xl`}></i>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{goal.title}</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{goal.deadline ? `Target: ${formatDate(goal.deadline)}` : 'Tanpa batas waktu'}</p>
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={isCompleted ? 'text-amber-500' : 'text-emerald-600'}>{formatRupiah(current)}</span>
+                              <span className="text-slate-400">{formatRupiah(target)}</span>
+                            </div>
+                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
+                              <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+                            {!isCompleted && (
+                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'subscriptions' && (
+              <div className="animate-fade-in">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left text-indigo-500"></i> Buat Tagihan Rutin</h3>
+                      <form onSubmit={handleCreateSubscription} className="space-y-5">
+                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Tagihan</label><input type="text" value={subName} onChange={(e) => setSubName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="Contoh: Listrik" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal per Bulan</label><input type="text" inputMode="numeric" value={subAmount} onChange={(e) => setSubAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="350.000" /></div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Jatuh Tempo (Tanggal)</label>
+                          <select value={subDate} onChange={(e) => setSubDate(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                            {[...Array(31)].map((_, i) => <option key={i+1} value={i+1}>Tanggal {i+1}</option>)}
+                          </select>
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Tagihan Rutin'}</button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {subscriptions.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-calendar-xmark text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada tagihan rutin</h4>
+                      </div>
+                    ) : (
+                      subscriptions.map(sub => {
+                        const currentMonthYear = getCurrentMonthYear();
+                        const isPaidThisMonth = sub.last_paid_month === currentMonthYear;
+                        return (
+                          <div key={sub.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
+                            <button onClick={() => handleDeleteSubscription(sub.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100"><i className="fa-solid fa-trash"></i></button>
+                            <div className="flex items-center gap-4 mb-5">
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isPaidThisMonth ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{getCategoryIcon(sub.category, 'expense')}</div>
+                              <div><h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">{sub.name}</h3><p className="text-xs font-medium text-slate-500 mt-1">Setiap Tgl {sub.due_date}</p></div>
+                            </div>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white mb-6">{formatRupiah(sub.amount)}</p>
+                            {isPaidThisMonth ? (
+                              <div className="w-full py-2.5 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm text-center border border-emerald-100"><i className="fa-solid fa-check-double mr-1.5"></i> Lunas (Bulan Ini)</div>
+                            ) : (
+                              <button onClick={() => handlePaySubscription(sub)} disabled={isLoading} className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-transparent"><i className="fa-solid fa-money-bill-wave"></i> Bayar Bulan Ini</button>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+  </style>
+</body>
+</html>
