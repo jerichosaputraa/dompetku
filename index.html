@@ -51,6 +51,12 @@
       return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     };
 
+    // Fungsi Pembantu: Format input teks dengan titik pemisah ribuan
+    const formatInputNumber = (value) => {
+      const val = value.replace(/\D/g, ''); // Hapus semua karakter yang bukan angka
+      return val.replace(/\B(?=(\d{3})+(?!\d))/g, "."); // Tambahkan titik setiap 3 digit
+    };
+
     // Kategori diperbarui: Menambahkan "Tabungan" di pengeluaran
     const categories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
@@ -136,7 +142,7 @@
       const [isLoading, setIsLoading] = useState(false);
 
       // Navigasi Utama (Beranda / Tabungan)
-      const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' atau 'savings'
+      const [activeTab, setActiveTab] = useState('dashboard');
 
       // Transaksi State
       const [transactions, setTransactions] = useState([]);
@@ -184,11 +190,9 @@
         if (!isLoggedIn || !user) return;
         const fetchData = async () => {
           setIsLoading(true);
-          // Ambil Transaksi
           const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
           if (txRes.data) setTransactions(txRes.data);
           
-          // Ambil Kantong Tabungan
           const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
           if (svRes.data) setSavingsGoals(svRes.data);
           
@@ -241,9 +245,13 @@
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!amount || !description || !category || !date) return;
+        
+        // Hapus titik sebelum konversi ke float
+        const numericAmount = parseFloat(amount.replace(/\./g, ''));
+        if (!numericAmount || !description || !category || !date) return;
+        
         setIsLoading(true);
-        const newTx = { type, amount: parseFloat(amount), description, category, date, user_email: user.email };
+        const newTx = { type, amount: numericAmount, description, category, date, user_email: user.email };
         const { data, error } = await supabase.from('transactions').insert([newTx]).select();
         
         if (error) {
@@ -256,7 +264,6 @@
         setIsLoading(false);
       };
 
-      // Hapus Transaksi
       const handleDelete = async (id) => {
         const { data, error } = await supabase.from('transactions').delete().eq('id', id).select();
         if (error) {
@@ -268,14 +275,16 @@
         }
       };
 
-      // Kantong Tabungan Handlers
       const handleCreateGoal = async (e) => {
         e.preventDefault();
-        if (!goalTitle || !goalTarget) return;
-        setIsLoading(true);
-        const newGoal = { title: goalTitle, target_amount: parseFloat(goalTarget), current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
         
-        // Meminta Supabase menyimpan dan mengembalikan datanya (.select())
+        // Hapus titik sebelum konversi
+        const numericTarget = parseFloat(goalTarget.replace(/\./g, ''));
+        if (!goalTitle || !numericTarget) return;
+        
+        setIsLoading(true);
+        const newGoal = { title: goalTitle, target_amount: numericTarget, current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
+        
         const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
         
         if (error) {
@@ -301,14 +310,15 @@
 
       const handleTopUpSubmit = async (e) => {
         e.preventDefault();
-        const topUpVal = parseFloat(topUpAmount);
+        
+        // Hapus titik sebelum perhitungan
+        const topUpVal = parseFloat(topUpAmount.replace(/\./g, ''));
         if (!topUpVal || topUpVal <= 0) return;
         
         setIsLoading(true);
         const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
         const newCurrent = parseFloat(goal.current_amount) + topUpVal;
 
-        // 1. Update Goal Amount
         const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
         
         if (updatedData && updatedData.length === 0) {
@@ -317,7 +327,6 @@
           return;
         }
         
-        // 2. Catat sebagai pengeluaran agar balance utama terpotong
         const txDate = new Date().toISOString().split('T')[0];
         const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, user_email: user.email };
         const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
@@ -401,7 +410,15 @@
                 <form onSubmit={handleTopUpSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
-                    <input type="number" value={topUpAmount} onChange={(e) => setTopUpAmount(e.target.value)} required min="1" className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: 100000" />
+                    <input 
+                      type="text" 
+                      inputMode="numeric"
+                      value={topUpAmount} 
+                      onChange={(e) => setTopUpAmount(formatInputNumber(e.target.value))} 
+                      required 
+                      className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" 
+                      placeholder="Contoh: 100.000" 
+                    />
                   </div>
                   <div className="flex gap-3 mt-8">
                     <button type="button" onClick={() => setTopUpModal({isOpen: false})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 font-medium transition-colors">Batal</button>
@@ -481,7 +498,15 @@
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
-                          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" />
+                          <input 
+                            type="text" 
+                            inputMode="numeric"
+                            value={amount} 
+                            onChange={(e) => setAmount(formatInputNumber(e.target.value))} 
+                            required 
+                            className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" 
+                            placeholder="Contoh: 50.000"
+                          />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Keterangan</label>
@@ -519,7 +544,7 @@
                         {filteredTransactions.map(t => {
                           const isIncome = t.type === 'income';
                           return (
-                            <div key={t.id} className="flex justify-between items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 group transition-all">
+                            <div key={t.id} className="flex justify-between items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 border border-transparent hover:border-slate-100 dark:border-slate-600 group transition-all">
                               <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 flex items-center justify-center rounded-xl ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{getCategoryIcon(t.category, t.type)}</div>
                                 <div><p className="font-semibold text-slate-900 dark:text-white">{t.description}</p><p className="text-xs text-slate-500 mt-1">{t.category} • {formatDate(t.date)}</p></div>
@@ -561,7 +586,15 @@
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
-                          <input type="number" value={goalTarget} onChange={(e) => setGoalTarget(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder="Cth: 15000000" />
+                          <input 
+                            type="text" 
+                            inputMode="numeric"
+                            value={goalTarget} 
+                            onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} 
+                            required 
+                            className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" 
+                            placeholder="Cth: 15.000.000" 
+                          />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
