@@ -274,12 +274,16 @@
         if (!goalTitle || !goalTarget) return;
         setIsLoading(true);
         const newGoal = { title: goalTitle, target_amount: parseFloat(goalTarget), current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
+        
+        // Meminta Supabase menyimpan dan mengembalikan datanya (.select())
         const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
-        if (!error && data) {
+        
+        if (error) {
+          console.error("Gagal buat tabungan:", error);
+          alert("Gagal membuat kantong tabungan! Terhalang izin keamanan (RLS) Supabase.");
+        } else if (data) {
           setSavingsGoals([...savingsGoals, data[0]]);
           setGoalTitle(''); setGoalTarget(''); setGoalDeadline('');
-        } else {
-          console.error("Gagal buat tabungan:", error);
         }
         setIsLoading(false);
       };
