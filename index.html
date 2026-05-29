@@ -46,6 +46,15 @@
       return val.replace(/\B(?=(\d{3})+(?!\d))/g, "."); 
     };
 
+    // Fungsi untuk mendapatkan tanggal HARI INI sesuai zona waktu lokal (WIB/WITA/WIT)
+    const getLocalDateString = () => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     const defaultCategories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
       expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Lainnya']
@@ -136,7 +145,7 @@
       const [type, setType] = useState('expense');
       const [amount, setAmount] = useState('');
       const [description, setDescription] = useState('');
-      const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+      const [date, setDate] = useState(getLocalDateString());
 
       // Kategori State (Bisa Kustom)
       const [categories, setCategories] = useState(defaultCategories);
@@ -276,7 +285,7 @@
           showToast("Gagal menyimpan data ke database.", "error");
         } else if (data) {
           setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setAmount(''); setDescription('');
+          setAmount(''); setDescription(''); setDate(getLocalDateString());
           showToast("Transaksi berhasil dicatat!");
         }
         setIsLoading(false);
@@ -363,7 +372,7 @@
           setIsLoading(false); return;
         }
         
-        const txDate = new Date().toISOString().split('T')[0];
+        const txDate = getLocalDateString();
         const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, user_email: user.email };
         const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
 
