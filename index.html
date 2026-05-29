@@ -180,19 +180,32 @@
         setAuthMessage({ text: '', type: '' });
         setIsLoading(true);
 
-        if (authMode === 'register') {
-          const { error } = await supabase.auth.signUp({
-            email, password, options: { data: { name } }
-          });
-          if (error) setAuthMessage({ text: error.message, type: 'error' });
-          else {
+        try {
+          if (authMode === 'register') {
+            const { data, error } = await supabase.auth.signUp({
+              email, password, options: { data: { name } }
+            });
+            
+            // Cek error dari Supabase
+            if (error) throw error;
+            
+            // Cek apakah user benar-benar terbuat
+            if (!data.user) {
+              throw new Error("Pendaftaran ditolak oleh sistem. Cek pengaturan Email di Supabase.");
+            }
+
             setAuthMessage({ text: 'Pendaftaran berhasil! Silakan login.', type: 'success' });
             setAuthMode('login');
+          } else {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            // Jika sukses, useEffect akan otomatis mendeteksi login
           }
-        } else {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) setAuthMessage({ text: "Email atau password salah.", type: 'error' });
+        } catch (err) {
+          console.error("Auth Error:", err);
+          setAuthMessage({ text: "Gagal: " + err.message, type: 'error' });
         }
+        
         setIsLoading(false);
       };
 
