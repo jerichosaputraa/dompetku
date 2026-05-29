@@ -115,8 +115,9 @@
       const [user, setUser] = useState(null);
       const [isLoading, setIsLoading] = useState(false);
       
-      const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | savings | subscriptions | shared
+      const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | savings | subscriptions | shared | budgets
 
+      // Personal Transaction
       const [transactions, setTransactions] = useState([]);
       const [type, setType] = useState('expense');
       const [amount, setAmount] = useState('');
@@ -128,6 +129,7 @@
       const [filterMonth, setFilterMonth] = useState('all');
       const [filterYear, setFilterYear] = useState('all');
 
+      // Savings
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
@@ -135,13 +137,19 @@
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
       const [topUpAmount, setTopUpAmount] = useState('');
 
+      // Subscriptions
       const [subscriptions, setSubscriptions] = useState([]);
       const [subName, setSubName] = useState('');
       const [subAmount, setSubAmount] = useState('');
       const [subDate, setSubDate] = useState('1'); 
       const [subCategory, setSubCategory] = useState('Tagihan');
 
-      // STATE DOMPET BERSAMA
+      // Budgets (Anggaran)
+      const [budgets, setBudgets] = useState([]);
+      const [budgetCat, setBudgetCat] = useState(categories.expense[0]);
+      const [budgetAmount, setBudgetAmount] = useState('');
+
+      // Shared Wallet
       const [sharedWallet, setSharedWallet] = useState(null);
       const [sharedTransactions, setSharedTransactions] = useState([]);
       const [newSharedName, setNewSharedName] = useState('');
@@ -153,6 +161,7 @@
       const [sharedCat, setSharedCat] = useState(categories.expense[0]);
       const [sharedTxDate, setSharedTxDate] = useState(new Date().toISOString().split('T')[0]);
 
+      // Dark mode toggle
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
       useEffect(() => {
         if (isDarkMode) { document.documentElement.classList.add('dark'); localStorage.setItem('darkMode', 'true'); } 
@@ -175,10 +184,15 @@
           // Data Personal
           const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
           if (txRes.data) setTransactions(txRes.data);
+          
           const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
           if (svRes.data) setSavingsGoals(svRes.data);
+          
           const subRes = await supabase.from('subscriptions').select('*').eq('user_email', user.email).order('due_date', { ascending: true });
           if (subRes.data) setSubscriptions(subRes.data);
+
+          const bgRes = await supabase.from('budgets').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+          if (bgRes.data) setBudgets(bgRes.data);
           
           // Data Dompet Bersama
           const memberRes = await supabase.from('shared_wallet_members').select('wallet_id').eq('user_email', user.email);
@@ -221,9 +235,19 @@
         }, { totalIncome: 0, totalExpense: 0, balance: 0 });
       }, [filteredTransactions]);
 
+      // Kalkulasi khusus untuk Limit Anggaran (Hanya bulan berjalan)
+      const currentMonthExpenses = useMemo(() => {
+        const currentMonthYear = getCurrentMonthYear(); 
+        return transactions.reduce((acc, tx) => {
+          if (tx.type === 'expense' && tx.date.startsWith(currentMonthYear)) {
+            acc[tx.category] = (acc[tx.category] || 0) + parseFloat(tx.amount);
+          }
+          return acc;
+        }, {});
+      }, [transactions]);
+
       const totalSavingsCollected = useMemo(() => savingsGoals.reduce((sum, goal) => sum + parseFloat(goal.current_amount || 0), 0), [savingsGoals]);
 
-      // --- Personal Functions ---
       const handleExportCSV = () => {
         if (filteredTransactions.length === 0) return;
         const headers = ['Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'];
@@ -249,27 +273,51 @@
 
       const handleDelete = async (id) => {
         const { data, error } = await supabase.from('transactions').delete().eq('id', id).select();
-        if (error || (data && data.length === 0)) alert("Gagal menghapus data!");
+        if (error || (data && data.length === 0)) alert("Gagal menghapus data! Cek izin Supabase.");
         else setTransactions(transactions.filter(t => t.id !== id));
       };
 
-      // --- LOGIKA DOMPET BERSAMA ---
+      // FUNGSI ANGGARAN BULANAN (BUDGETS)
+      const handleSaveBudget = async (e) => {
+        e.preventDefault();
+        const numAmount = parseFloat(budgetAmount.replace(/\./g, ''));
+        if (!numAmount || !budgetCat) return;
+
+        setIsLoading(true);
+        const existingBudget = budgets.find(b => b.category === budgetCat);
+
+        if (existingBudget) {
+          // Update jika sudah ada
+          const { data, error } = await supabase.from('budgets').update({ amount: numAmount }).eq('id', existingBudget.id).select();
+          if (data && !error) setBudgets(budgets.map(b => b.id === existingBudget.id ? data[0] : b));
+          else alert("Gagal memperbarui anggaran.");
+        } else {
+          // Insert jika belum ada
+          const newBg = { category: budgetCat, amount: numAmount, user_email: user.email };
+          const { data, error } = await supabase.from('budgets').insert([newBg]).select();
+          if (data && !error) setBudgets([...budgets, data[0]]);
+          else alert("Gagal menyimpan anggaran baru.");
+        }
+        setBudgetAmount('');
+        setIsLoading(false);
+      };
+
+      const handleDeleteBudget = async (id) => {
+        const { error } = await supabase.from('budgets').delete().eq('id', id);
+        if (!error) setBudgets(budgets.filter(b => b.id !== id));
+      };
+
       const createSharedWallet = async (e) => {
         e.preventDefault();
         if(!newSharedName) return;
         setIsLoading(true);
-        // Generate random 6 character code
         const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
         
         const { data: wData, error: wErr } = await supabase.from('shared_wallets').insert([{ name: newSharedName, join_code: joinCode, created_by: user.email }]).select();
         if (wData) {
           await supabase.from('shared_wallet_members').insert([{ wallet_id: wData[0].id, user_email: user.email }]);
-          setSharedWallet(wData[0]);
-          setSharedTransactions([]);
-          setNewSharedName('');
-        } else {
-          alert("Gagal membuat dompet.");
-        }
+          setSharedWallet(wData[0]); setSharedTransactions([]); setNewSharedName('');
+        } else alert("Gagal membuat dompet.");
         setIsLoading(false);
       };
 
@@ -278,21 +326,16 @@
         if(!joinCodeInput) return;
         setIsLoading(true);
         const code = joinCodeInput.trim().toUpperCase();
-        
         const { data: wData } = await supabase.from('shared_wallets').select('*').eq('join_code', code).single();
+        
         if (wData) {
-          // Check if already member to avoid error
           const { data: existing } = await supabase.from('shared_wallet_members').select('*').eq('wallet_id', wData.id).eq('user_email', user.email);
-          if(!existing || existing.length === 0) {
-            await supabase.from('shared_wallet_members').insert([{ wallet_id: wData.id, user_email: user.email }]);
-          }
+          if(!existing || existing.length === 0) await supabase.from('shared_wallet_members').insert([{ wallet_id: wData.id, user_email: user.email }]);
           setSharedWallet(wData);
           const { data: stxData } = await supabase.from('shared_transactions').select('*').eq('wallet_id', wData.id).order('date', { ascending: false });
           if (stxData) setSharedTransactions(stxData);
           setJoinCodeInput('');
-        } else {
-          alert("Kode dompet tidak valid atau tidak ditemukan.");
-        }
+        } else alert("Kode dompet tidak valid atau tidak ditemukan.");
         setIsLoading(false);
       };
 
@@ -300,8 +343,7 @@
         if(!sharedWallet || !confirm("Yakin ingin keluar dari dompet ini?")) return;
         setIsLoading(true);
         await supabase.from('shared_wallet_members').delete().eq('wallet_id', sharedWallet.id).eq('user_email', user.email);
-        setSharedWallet(null);
-        setSharedTransactions([]);
+        setSharedWallet(null); setSharedTransactions([]);
         setIsLoading(false);
       };
 
@@ -315,10 +357,7 @@
         const { data, error } = await supabase.from('shared_transactions').insert([newTx]).select();
         
         if (error) alert("Gagal menyimpan transaksi bersama.");
-        else {
-          setSharedTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setSharedAmount(''); setSharedDesc('');
-        }
+        else { setSharedTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); setSharedAmount(''); setSharedDesc(''); }
         setIsLoading(false);
       };
 
@@ -327,7 +366,6 @@
         if (!error) setSharedTransactions(sharedTransactions.filter(t => t.id !== id));
       };
 
-      // Kalkulasi Uang Bersama
       const { sharedIncome, sharedExpense, sharedBalance } = useMemo(() => {
         return sharedTransactions.reduce((acc, curr) => {
           const numAmount = parseFloat(curr.amount);
@@ -337,15 +375,14 @@
         }, { sharedIncome: 0, sharedExpense: 0, sharedBalance: 0 });
       }, [sharedTransactions]);
 
-
-      // --- Other Logics (Savings, Subscriptions, Auth) ---
+      // --- Tabungan ---
       const handleCreateGoal = async (e) => {
         e.preventDefault();
         const numTarget = parseFloat(goalTarget.replace(/\./g, ''));
         if (!goalTitle || !numTarget) return;
         setIsLoading(true);
         const { data, error } = await supabase.from('savings_goals').insert([{ title: goalTitle, target_amount: numTarget, current_amount: 0, deadline: goalDeadline || null, user_email: user.email }]).select();
-        if (data) { setSavingsGoals([...savingsGoals, data[0]]); setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); }
+        if (data && !error) { setSavingsGoals([...savingsGoals, data[0]]); setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); }
         setIsLoading(false);
       };
 
@@ -363,7 +400,8 @@
         const newCurrent = parseFloat(goal.current_amount) + topUpVal;
 
         const { data: updatedData } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
-        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: new Date().toISOString().split('T')[0], user_email: user.email };
+        const txDate = new Date().toISOString().split('T')[0];
+        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, user_email: user.email };
         const { data: txData } = await supabase.from('transactions').insert([newTx]).select();
 
         if (updatedData) {
@@ -374,6 +412,7 @@
         setIsLoading(false);
       };
 
+      // --- Langganan Rutin ---
       const handleCreateSubscription = async (e) => {
         e.preventDefault();
         const numericAmount = parseFloat(subAmount.replace(/\./g, ''));
@@ -381,7 +420,7 @@
         setIsLoading(true);
         const newSub = { name: subName, amount: numericAmount, due_date: parseInt(subDate), category: subCategory, last_paid_month: null, user_email: user.email };
         const { data, error } = await supabase.from('subscriptions').insert([newSub]).select();
-        if (data) { setSubscriptions([...subscriptions, data[0]].sort((a,b) => a.due_date - b.due_date)); setSubName(''); setSubAmount(''); setSubDate('1'); }
+        if (data && !error) { setSubscriptions([...subscriptions, data[0]].sort((a,b) => a.due_date - b.due_date)); setSubName(''); setSubAmount(''); setSubDate('1'); }
         setIsLoading(false);
       };
 
@@ -464,7 +503,7 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Anda akan memindahkan saldo utama ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan saldo utama ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
                 <form onSubmit={handleTopUpSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
@@ -472,7 +511,7 @@
                   </div>
                   <div className="flex gap-3 mt-8">
                     <button type="button" onClick={() => setTopUpModal({isOpen: false})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
-                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Uang'}</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan'}</button>
                   </div>
                 </form>
               </div>
@@ -496,11 +535,12 @@
                 </div>
               </div>
               
-              <div className="flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
-                <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
-                <button onClick={() => setActiveTab('shared')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'shared' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-users mr-1.5"></i> Dompet Bersama</button>
-                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
-                <button onClick={() => setActiveTab('subscriptions')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'subscriptions' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700'}`}><i className="fa-solid fa-calendar-check mr-1.5"></i> Tagihan Rutin</button>
+              <div className="flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar whitespace-nowrap">
+                <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
+                <button onClick={() => setActiveTab('shared')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'shared' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users mr-1.5"></i> Dompet Bersama</button>
+                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Target Tabungan</button>
+                <button onClick={() => setActiveTab('subscriptions')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'subscriptions' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-check mr-1.5"></i> Tagihan Rutin</button>
+                <button onClick={() => setActiveTab('budgets')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === 'budgets' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:hover:text-slate-300'}`}><i className="fa-solid fa-scale-balanced mr-1.5"></i> Batas Anggaran</button>
               </div>
             </div>
           </header>
@@ -612,11 +652,8 @@
               </div>
             )}
 
-            {}
             {activeTab === 'shared' && (
               <div className="animate-fade-in">
-                
-                {/* JIKA BELUM PUNYA DOMPET BERSAMA */}
                 {!sharedWallet ? (
                   <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-8 text-center max-w-2xl mx-auto shadow-sm">
                     <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -626,7 +663,6 @@
                     <p className="text-slate-500 dark:text-slate-400 mb-8">Kelola uang kas, patungan liburan, atau keuangan rumah tangga bersama-sama secara transparan.</p>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-left">
-                      {/* Form Buat Dompet */}
                       <form onSubmit={createSharedWallet} className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
                         <h3 className="font-bold text-slate-900 dark:text-white mb-4"><i className="fa-solid fa-plus-circle text-indigo-600 mr-2"></i> Buat Dompet Baru</h3>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Dompet</label>
@@ -634,7 +670,6 @@
                         <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-medium">{isLoading ? 'Memproses...' : 'Buat Sekarang'}</button>
                       </form>
 
-                      {/* Form Gabung Dompet */}
                       <form onSubmit={joinSharedWallet} className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
                         <h3 className="font-bold text-slate-900 dark:text-white mb-4"><i className="fa-solid fa-link text-emerald-600 mr-2"></i> Gabung ke Dompet</h3>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Kode Gabung (6 Karakter)</label>
@@ -644,10 +679,7 @@
                     </div>
                   </div>
                 ) : (
-                  
-                  /* JIKA SUDAH PUNYA DOMPET BERSAMA */
                   <div>
-                    {/* Header Dompet Bersama */}
                     <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-6 sm:p-8 text-white shadow-lg mb-8 relative overflow-hidden flex flex-col sm:flex-row justify-between items-center gap-6">
                       <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -translate-y-1/2 translate-x-1/3"></div>
                       <div className="relative z-10 text-center sm:text-left">
@@ -664,7 +696,6 @@
                       </div>
                     </div>
 
-                    {/* Ringkasan Uang Bersama */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                       <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><i className="fa-solid fa-users text-lg"></i><h2 className="font-medium">Total Uang Bersama</h2></div>
@@ -681,7 +712,6 @@
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      {/* Form Input Dompet Bersama */}
                       <div className="lg:col-span-1">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
                           <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-pen-to-square text-indigo-600"></i> Catat Transaksi Bersama</h3>
@@ -713,7 +743,6 @@
                         </div>
                       </div>
 
-                      {/* Riwayat Dompet Bersama */}
                       <div className="lg:col-span-2">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-6">
                           <div className="flex justify-between mb-6">
@@ -757,7 +786,6 @@
               </div>
             )}
 
-            {}
             {activeTab === 'savings' && (
               <div className="animate-fade-in">
                 <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
@@ -884,6 +912,96 @@
               </div>
             )}
 
+            {activeTab === 'budgets' && (
+              <div className="animate-fade-in">
+                
+                <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-3xl p-6 sm:p-8 text-white shadow-lg mb-8 relative overflow-hidden">
+                  <div className="relative z-10 text-center sm:text-left">
+                    <p className="text-amber-100 font-medium mb-1 text-sm uppercase tracking-wider">Kontrol Finansial</p>
+                    <h2 className="text-3xl font-bold mb-2">Batas Anggaran Bulanan</h2>
+                    <p className="text-amber-50 text-sm">Atur batas maksimal pengeluaran per kategori agar tidak boros. Sistem akan mengevaluasi pengeluaran Anda khusus di bulan berjalan.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-scale-balanced text-amber-500"></i> Atur Anggaran</h3>
+                      <form onSubmit={handleSaveBudget} className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Pilih Kategori</label>
+                          <select value={budgetCat} onChange={(e) => setBudgetCat(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white">
+                            {categories.expense.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Batas Maksimal (Rp/Bulan)</label>
+                          <input type="text" inputMode="numeric" value={budgetAmount} onChange={(e) => setBudgetAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white" placeholder="Contoh: 1.500.000" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Anggaran'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 grid grid-cols-1 gap-6 items-start">
+                    {budgets.length === 0 ? (
+                      <div className="text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-shield-halved text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada anggaran diatur</h4>
+                        <p className="text-slate-500 text-sm">Pilih kategori dan tentukan batasnya untuk mulai memantau.</p>
+                      </div>
+                    ) : (
+                      budgets.map(budget => {
+                        const limit = parseFloat(budget.amount);
+                        const spent = currentMonthExpenses[budget.category] || 0;
+                        const percentage = Math.min((spent / limit) * 100, 100);
+                        const isOver = spent > limit;
+                        
+                        let barColor = 'bg-emerald-500';
+                        let textColor = 'text-emerald-600';
+                        if (percentage >= 100) { barColor = 'bg-rose-500'; textColor = 'text-rose-600'; }
+                        else if (percentage >= 75) { barColor = 'bg-amber-500'; textColor = 'text-amber-500'; }
+
+                        return (
+                          <div key={budget.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group">
+                            <button onClick={() => handleDeleteBudget(budget.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
+                                {getCategoryIcon(budget.category, 'expense')}
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{budget.category}</h3>
+                                <p className="text-xs text-slate-500">Anggaran Bulan Ini</p>
+                              </div>
+                            </div>
+
+                            <div className="mb-2 flex justify-between items-end">
+                              <div>
+                                <span className={`text-2xl font-bold ${textColor}`}>{formatRupiah(spent)}</span>
+                                <span className="text-slate-400 text-sm ml-1">/ {formatRupiah(limit)}</span>
+                              </div>
+                              <span className={`text-sm font-bold ${textColor}`}>{percentage.toFixed(0)}%</span>
+                            </div>
+
+                            <div className="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all duration-1000 ${barColor}`} style={{ width: `${percentage}%` }}></div>
+                            </div>
+                            
+                            {isOver && (
+                              <p className="text-xs font-medium text-rose-500 mt-3 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation"></i> Anda telah melewati batas anggaran bulan ini!</p>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </main>
         </div>
       );
@@ -894,7 +1012,7 @@
   </script>
 
   <style>
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
