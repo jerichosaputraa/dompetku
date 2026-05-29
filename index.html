@@ -1,433 +1,516 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FinansialKu - Pencatat Keuangan</title>
-  
-  <!-- Tailwind CSS dari CDN agar tampilan langsung cantik tanpa install -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- FontAwesome untuk Ikon (Pengganti Lucide yang lebih mudah untuk HTML mentah) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <!-- React & ReactDOM dari CDN -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  
-  <!-- Babel agar browser bisa membaca format React (JSX) langsung -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Wallet, 
+  ArrowDownRight, 
+  ArrowUpRight, 
+  Plus, 
+  Trash2, 
+  Calendar, 
+  Tag, 
+  FileText, 
+  Coffee,
+  Car,
+  Home,
+  ShoppingBag,
+  Briefcase,
+  Activity,
+  User,
+  Lock,
+  Mail,
+  LogOut,
+  Loader2
+} from 'lucide-react';
 
-  <!-- Firebase API (Versi Compat) agar aman di satu file HTML -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
-</head>
-<body class="bg-slate-50 text-slate-800 font-sans">
-  
-  <!-- Di sinilah React akan merender website -->
-  <div id="root"></div>
+// --- IMPORT SUPABASE ---
+import { createClient } from '@supabase/supabase-js';
 
-  <!-- Kode Logika & UI -->
-  <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
+// ==========================================
+// 1. MASUKKAN KUNCI SUPABASE ANDA DI SINI
+// ==========================================
+const supabaseUrl = 'PASTE_PROJECT_URL_ANDA_DI_SINI';
+const supabaseKey = 'PASTE_ANON_KEY_ANDA_DI_SINI';
 
-    // --- Konfigurasi Database ---
-    // (Aman untuk GitHub: jika tidak ada koneksi, akan otomatis berjalan offline di browser)
-    let app, auth, db;
-    try {
-      const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-      if (configStr && window.firebase) {
-        const firebaseConfig = JSON.parse(configStr);
-        app = firebase.initializeApp(firebaseConfig);
-        auth = firebase.auth();
-        db = firebase.firestore();
-      }
-    } catch(e) {
-      console.warn("Berjalan dalam mode lokal (tanpa koneksi database cloud).");
-    }
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// Inisialisasi Supabase
+const supabase = (supabaseUrl !== 'PASTE_PROJECT_URL_ANDA_DI_SINI') 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;
 
-    // --- Data Awal ---
-    const initialTransactions = [
-      { id: 1, type: 'income', amount: 5000000, description: 'Gaji Bulanan', category: 'Gaji', date: '2026-05-25' },
-      { id: 2, type: 'expense', amount: 150000, description: 'Makan Siang & Kopi', category: 'Makanan', date: '2026-05-26' },
-      { id: 3, type: 'expense', amount: 50000, description: 'Bensin Motor', category: 'Transportasi', date: '2026-05-27' },
-      { id: 4, type: 'expense', amount: 300000, description: 'Belanja Bulanan', category: 'Belanja', date: '2026-05-28' },
-      { id: 5, type: 'income', amount: 1500000, description: 'Freelance Design', category: 'Sampingan', date: '2026-05-29' },
-    ];
+// --- Kategori Pre-defined ---
+const categories = {
+  income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
+  expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Lainnya']
+};
 
-    const categories = {
-      income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
-      expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Lainnya']
-    };
+// --- Fungsi Helper ---
+const formatRupiah = (number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(number);
+};
 
-    const formatRupiah = (number) => {
-      return new Intl.NumberFormat('id-ID', {
-        style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0,
-      }).format(number);
-    };
+const formatDate = (dateString) => {
+  const options = { day: 'numeric', month: 'long', year: 'numeric' };
+  return new Date(dateString).toLocaleDateString('id-ID', options);
+};
 
-    const formatDate = (dateString) => {
-      const options = { day: 'numeric', month: 'long', year: 'numeric' };
-      return new Date(dateString).toLocaleDateString('id-ID', options);
-    };
+const getCategoryIcon = (category, type) => {
+  if (type === 'income') {
+    if (category === 'Gaji') return <Briefcase size={20} />;
+    return <Activity size={20} />;
+  }
+  switch (category) {
+    case 'Makanan': return <Coffee size={20} />;
+    case 'Transportasi': return <Car size={20} />;
+    case 'Belanja': return <ShoppingBag size={20} />;
+    case 'Tagihan': return <Home size={20} />;
+    default: return <Tag size={20} />;
+  }
+};
 
-    const getCategoryIcon = (category, type) => {
-      if (type === 'income') {
-        if (category === 'Gaji') return <i className="fa-solid fa-briefcase text-xl"></i>;
-        return <i className="fa-solid fa-chart-line text-xl"></i>;
-      }
-      switch (category) {
-        case 'Makanan': return <i className="fa-solid fa-mug-hot text-xl"></i>;
-        case 'Transportasi': return <i className="fa-solid fa-car text-xl"></i>;
-        case 'Belanja': return <i className="fa-solid fa-bag-shopping text-xl"></i>;
-        case 'Tagihan': return <i className="fa-solid fa-house text-xl"></i>;
-        default: return <i className="fa-solid fa-tag text-xl"></i>;
-      }
-    };
+export default function App() {
+  // --- State Autentikasi ---
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [authMessage, setAuthMessage] = useState({ text: '', type: '' });
+  const [supabaseUser, setSupabaseUser] = useState(null);
 
-    function App() {
-      const [isLoggedIn, setIsLoggedIn] = useState(false);
-      const [authMode, setAuthMode] = useState('login'); 
-      const [email, setEmail] = useState('');
-      const [password, setPassword] = useState('');
-      const [name, setName] = useState('');
-      const [currentUser, setCurrentUser] = useState(null);
-      const [firebaseUser, setFirebaseUser] = useState(null);
-      const [isLoading, setIsLoading] = useState(false);
+  // --- State Data & UI ---
+  const [isLoading, setIsLoading] = useState(false);
+  const [transactions, setTransactions] = useState([]);
+  const [type, setType] = useState('expense');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState(categories.expense[0]);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-      const [transactions, setTransactions] = useState(initialTransactions);
-      const [type, setType] = useState('expense');
-      const [amount, setAmount] = useState('');
-      const [description, setDescription] = useState('');
-      const [category, setCategory] = useState(categories.expense[0]);
-      const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // --- Efek: Cek Sesi Login Supabase ---
+  useEffect(() => {
+    if (!supabase) return;
 
-      // --- Sinkronisasi Cloud Database ---
-      useEffect(() => {
-        if(!auth) return;
-        const initAuth = async () => {
-          try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await auth.signInWithCustomToken(__initial_auth_token);
-            } else {
-              await auth.signInAnonymously();
-            }
-          } catch (error) {
-            console.error("Autentikasi error:", error);
-          }
-        };
-        initAuth();
-        
-        const unsubscribe = auth.onAuthStateChanged((u) => setFirebaseUser(u));
-        return () => unsubscribe();
-      }, []);
-
-      useEffect(() => {
-        if (!db || !firebaseUser || !isLoggedIn) return;
-        setIsLoading(true);
-
-        const txRef = db.collection('artifacts').doc(appId).collection('users').doc(firebaseUser.uid).collection('transactions');
-        const unsubscribe = txRef.onSnapshot((snapshot) => {
-          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          data.sort((a, b) => new Date(b.date) - new Date(a.date));
-          setTransactions(data);
-          setIsLoading(false);
-        }, (error) => {
-          console.error("Error memuat data:", error);
-          setIsLoading(false);
-        });
-
-        return () => unsubscribe();
-      }, [firebaseUser, isLoggedIn]);
-
-      // --- Logika Aplikasi ---
-      const { totalIncome, totalExpense, balance } = useMemo(() => {
-        return transactions.reduce((acc, curr) => {
-          if (curr.type === 'income') {
-            acc.totalIncome += curr.amount; acc.balance += curr.amount;
-          } else {
-            acc.totalExpense += curr.amount; acc.balance -= curr.amount;
-          }
-          return acc;
-        }, { totalIncome: 0, totalExpense: 0, balance: 0 });
-      }, [transactions]);
-
-      const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!amount || !description || !category || !date) return;
-
-        const txId = Date.now().toString();
-        const newTransaction = {
-          id: txId, type, amount: parseFloat(amount), description, category, date,
-        };
-
-        if (db && firebaseUser) {
-          try {
-            await db.collection('artifacts').doc(appId).collection('users').doc(firebaseUser.uid).collection('transactions').doc(txId).set(newTransaction);
-          } catch (error) { console.error("Gagal menyimpan transaksi:", error); }
-        } else {
-            // Jika berjalan di Github tanpa koneksi, simpan di memori (sementara)
-            setTransactions(prev => [newTransaction, ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-        }
-        setAmount(''); setDescription('');
-      };
-
-      const handleDelete = async (id) => {
-        if (db && firebaseUser) {
-          try {
-            await db.collection('artifacts').doc(appId).collection('users').doc(firebaseUser.uid).collection('transactions').doc(id.toString()).delete();
-          } catch (error) { console.error("Gagal menghapus transaksi:", error); }
-        } else {
-           setTransactions(transactions.filter(t => t.id !== id));
-        }
-      };
-
-      const handleAuth = (e) => {
-        e.preventDefault();
-        if (!email || !password) return;
-        if (authMode === 'register' && !name) return;
-
-        setCurrentUser({ 
-          name: authMode === 'register' ? name : (email.split('@')[0] || 'Pengguna'), email 
-        });
+    // Cek sesi saat web dimuat pertama kali
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setSupabaseUser(session.user);
         setIsLoggedIn(true);
-      };
+      }
+    });
 
-      const handleLogout = () => {
-        setIsLoggedIn(false); setCurrentUser(null); setEmail(''); setPassword(''); setName('');
-      };
+    // Dengarkan perubahan status login/logout
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setSupabaseUser(session.user);
+        setIsLoggedIn(true);
+      } else {
+        setSupabaseUser(null);
+        setIsLoggedIn(false);
+        setTransactions([]);
+      }
+    });
 
-      // --- Tampilan Render UI ---
-      if (!isLoggedIn) {
-        return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-800">
-            <div className="bg-white max-w-md w-full rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden">
-              <div className="bg-indigo-600 p-8 text-center text-white">
-                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                  <i className="fa-solid fa-wallet text-3xl text-white"></i>
-                </div>
-                <h1 className="text-2xl font-bold tracking-tight">FinansialKu</h1>
-                <p className="text-indigo-200 mt-2 text-sm">Kelola keuangan Anda dengan mudah & rapi</p>
-              </div>
-              
-              <div className="p-8">
-                <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
-                  <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Masuk</button>
-                  <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Daftar</button>
-                </div>
+    return () => subscription.unsubscribe();
+  }, []);
 
-                <form onSubmit={handleAuth} className="space-y-4">
-                  {authMode === 'register' && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Lengkap</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <i className="fa-solid fa-user text-slate-400"></i>
-                        </div>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="Misal: Budi Santoso" />
-                      </div>
+  // --- Efek: Ambil Data dari Database ---
+  useEffect(() => {
+    if (!supabase || !isLoggedIn || !supabaseUser) return;
+    
+    const fetchTransactions = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_email', supabaseUser.email) // Mengambil data khusus user yang sedang login
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error("Error ambil data:", error);
+      } else if (data) {
+        setTransactions(data);
+      }
+      setIsLoading(false);
+    };
+
+    fetchTransactions();
+  }, [isLoggedIn, supabaseUser]);
+
+  // --- Kalkulasi Ringkasan ---
+  const { totalIncome, totalExpense, balance } = useMemo(() => {
+    return transactions.reduce((acc, curr) => {
+      const numAmount = parseFloat(curr.amount);
+      if (curr.type === 'income') {
+        acc.totalIncome += numAmount; acc.balance += numAmount;
+      } else {
+        acc.totalExpense += numAmount; acc.balance -= numAmount;
+      }
+      return acc;
+    }, { totalIncome: 0, totalExpense: 0, balance: 0 });
+  }, [transactions]);
+
+  // --- Handle Tambah Data ---
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!amount || !description || !category || !date) return;
+
+    const newTransaction = {
+      type, 
+      amount: parseFloat(amount), 
+      description, 
+      category, 
+      date,
+      user_email: supabaseUser?.email
+    };
+
+    if (supabase && supabaseUser) {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert([newTransaction])
+        .select(); 
+
+      if (error) {
+        console.error("Gagal simpan:", error);
+      } else if (data) {
+        // Update tampilan dengan data baru
+        setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+        setAmount(''); 
+        setDescription('');
+      }
+      setIsLoading(false);
+    }
+  };
+
+  // --- Handle Hapus Data ---
+  const handleDelete = async (id) => {
+    if (supabase && supabaseUser) {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+        
+      if (error) {
+        console.error("Gagal hapus:", error);
+      } else {
+        setTransactions(transactions.filter(t => t.id !== id));
+      }
+    }
+  };
+
+  // --- Handle Login / Register ---
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!supabase) {
+      setAuthMessage({ text: 'Kunci Supabase belum dipasang di kodingan.', type: 'error' });
+      return;
+    }
+
+    setAuthMessage({ text: '', type: '' });
+    setIsLoading(true);
+
+    if (authMode === 'register') {
+      // PROSES DAFTAR SUPABASE
+      const { error } = await supabase.auth.signUp({
+        email, 
+        password, 
+        options: { data: { name } }
+      });
+      if (error) {
+        setAuthMessage({ text: error.message, type: 'error' });
+      } else {
+        setAuthMessage({ text: 'Berhasil! Silakan masuk dengan akun Anda (Jika di Supabase konfirmasi email nyala, cek email Anda).', type: 'success' });
+        setAuthMode('login');
+      }
+    } else {
+      // PROSES LOGIN SUPABASE
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setAuthMessage({ text: "Email atau kata sandi salah.", type: 'error' });
+      }
+    }
+    setIsLoading(false);
+  };
+
+  // --- Handle Logout ---
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setEmail(''); setPassword(''); setName(''); 
+    setAuthMessage({ text: '', type: '' });
+  };
+
+  // Jika belum login, tampilkan halaman Login/Register
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-800">
+        <div className="bg-white max-w-md w-full rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden relative">
+          
+          {authMessage.text && (
+            <div className={`absolute top-0 left-0 right-0 p-3 text-sm text-center font-medium ${authMessage.type === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'}`}>
+              {authMessage.text}
+            </div>
+          )}
+
+          <div className="bg-indigo-600 p-8 pt-12 text-center text-white">
+            <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+              <Wallet size={32} className="text-white" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">FinansialKu</h1>
+            <p className="text-indigo-200 mt-2 text-sm">Masuk untuk mengelola keuangan</p>
+          </div>
+          
+          <div className="p-8">
+            <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
+              <button 
+                onClick={() => {setAuthMode('login'); setAuthMessage({text:'', type:''})}}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Masuk
+              </button>
+              <button 
+                onClick={() => {setAuthMode('register'); setAuthMessage({text:'', type:''})}}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Daftar
+              </button>
+            </div>
+
+            <form onSubmit={handleAuth} className="space-y-4">
+              {authMode === 'register' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Nama Lengkap</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User size={18} className="text-slate-400" />
                     </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i className="fa-solid fa-envelope text-slate-400"></i>
-                      </div>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="nama@email.com" />
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="Misal: Budi Santoso" />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail size={18} className="text-slate-400" />
+                  </div>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="nama@email.com" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Kata Sandi</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock size={18} className="text-slate-400" />
+                  </div>
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="••••••••" />
+                </div>
+              </div>
+
+              <button type="submit" disabled={isLoading} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                {isLoading ? <Loader2 size={20} className="animate-spin" /> : (authMode === 'login' ? 'Masuk ke Akun' : 'Buat Akun Sekarang')}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Tampilan Dashboard ---
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-600 p-2 rounded-xl text-white">
+              <Wallet size={24} />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">FinansialKu</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:block text-sm font-medium text-slate-500">
+              Halo, <span className="text-indigo-600 font-semibold">{supabaseUser?.user_metadata?.name || supabaseUser?.email?.split('@')[0]}</span>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2"
+              title="Keluar"
+            >
+              <LogOut size={20} />
+              <span className="hidden sm:inline text-sm font-medium">Keluar</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        
+        {/* Ringkasan Saldo */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 flex flex-col justify-between">
+            <div className="flex items-center gap-2 text-indigo-100 mb-2">
+              <Wallet size={20} />
+              <h2 className="font-medium">Total Saldo</h2>
+            </div>
+            <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center gap-2 text-slate-500 mb-2">
+              <div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-600">
+                <ArrowDownRight size={18} />
+              </div>
+              <h2 className="font-medium">Pemasukan</h2>
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalIncome)}</p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center gap-2 text-slate-500 mb-2">
+              <div className="bg-rose-100 p-1.5 rounded-lg text-rose-600">
+                <ArrowUpRight size={18} />
+              </div>
+              <h2 className="font-medium">Pengeluaran</h2>
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalExpense)}</p>
+          </div>
+        </div>
+
+        {/* Konten Form & Daftar Transaksi */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-24">
+              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <Plus size={20} className="text-indigo-600" />
+                Catat Transaksi
+              </h3>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="flex p-1 bg-slate-100 rounded-xl">
+                  <button type="button" onClick={() => {setType('expense'); setCategory(categories.expense[0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pengeluaran</button>
+                  <button type="button" onClick={() => {setType('income'); setCategory(categories.income[0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pemasukan</button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Nominal (Rp)</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-slate-400 font-medium">Rp</span>
+                    </div>
+                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" required min="1" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Keterangan</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <FileText size={18} className="text-slate-400" />
+                    </div>
+                    <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Contoh: Makan siang" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" required />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Tag size={18} className="text-slate-400" />
+                    </div>
+                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all appearance-none" required>
+                      {categories[type].map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Kata Sandi</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <i className="fa-solid fa-lock text-slate-400"></i>
-                      </div>
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" placeholder="••••••••" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Tanggal</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Calendar size={18} className="text-slate-400" />
                     </div>
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all" required />
                   </div>
-                  <button type="submit" className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    {authMode === 'login' ? 'Masuk ke Akun' : 'Buat Akun Sekarang'}
-                  </button>
-                </form>
-              </div>
+                </div>
+
+                <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                  {isLoading ? <Loader2 size={20} className="animate-spin" /> : <><Plus size={20} /> Simpan Transaksi</>}
+                </button>
+              </form>
             </div>
           </div>
-        );
-      }
 
-      return (
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
-          {/* Header */}
-          <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="bg-indigo-600 p-2 rounded-xl text-white">
-                  <i className="fa-solid fa-wallet text-xl"></i>
-                </div>
-                <h1 className="text-xl font-bold text-slate-900 tracking-tight">FinansialKu</h1>
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-slate-900">Riwayat Transaksi</h3>
+                <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                  {isLoading ? 'Memuat...' : `${transactions.length} Transaksi`}
+                </span>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="hidden sm:block text-sm font-medium text-slate-500">
-                  Halo, <span className="text-indigo-600 font-semibold">{currentUser?.name}</span>
-                </div>
-                <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-2" title="Keluar">
-                  <i className="fa-solid fa-right-from-bracket text-lg"></i>
-                  <span className="hidden sm:inline text-sm font-medium">Keluar</span>
-                </button>
-              </div>
-            </div>
-          </header>
 
-          <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-            {/* Dashboard Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 flex flex-col justify-between">
-                <div className="flex items-center gap-2 text-indigo-100 mb-2">
-                  <i className="fa-solid fa-wallet text-lg"></i>
-                  <h2 className="font-medium">Total Saldo</h2>
+              {isLoading && transactions.length === 0 ? (
+                <div className="text-center py-16 px-4">
+                  <Loader2 size={32} className="animate-spin text-indigo-600 mx-auto mb-4" />
+                  <p className="text-slate-500 font-medium">Memuat dari database...</p>
                 </div>
-                <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center gap-2 text-slate-500 mb-2">
-                  <div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-600">
-                    <i className="fa-solid fa-arrow-trend-down"></i>
+              ) : transactions.length === 0 ? (
+                <div className="text-center py-16 px-4">
+                  <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText size={32} className="text-slate-300" />
                   </div>
-                  <h2 className="font-medium">Pemasukan</h2>
+                  <h4 className="text-slate-900 font-medium mb-1">Belum ada transaksi</h4>
+                  <p className="text-slate-500 text-sm">Mulai catat pemasukan dan pengeluaran Anda.</p>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalIncome)}</p>
-              </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
-                <div className="flex items-center gap-2 text-slate-500 mb-2">
-                  <div className="bg-rose-100 p-1.5 rounded-lg text-rose-600">
-                    <i className="fa-solid fa-arrow-trend-up"></i>
-                  </div>
-                  <h2 className="font-medium">Pengeluaran</h2>
-                </div>
-                <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalExpense)}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Form Kolom Kiri */}
-              <div className="lg:col-span-1">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-24">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                    <i className="fa-solid fa-plus text-indigo-600"></i>
-                    Catat Transaksi
-                  </h3>
-                  <form onSubmit={handleSubmit} className="space-y-5">
-                    <div className="flex p-1 bg-slate-100 rounded-xl">
-                      <button type="button" onClick={() => {setType('expense'); setCategory(categories['expense'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pengeluaran</button>
-                      <button type="button" onClick={() => {setType('income'); setCategory(categories['income'][0])}} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${type === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pemasukan</button>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Nominal (Rp)</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-slate-400 font-medium">Rp</span></div>
-                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" required min="1" className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Keterangan</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-file-lines text-slate-400"></i></div>
-                        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Contoh: Makan siang" required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Kategori</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-tag text-slate-400"></i></div>
-                        <select value={category} onChange={(e) => setCategory(e.target.value)} required className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
-                          {categories[type].map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
-                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">Tanggal</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i className="fa-solid fa-calendar text-slate-400"></i></div>
-                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                      </div>
-                    </div>
-                    <button type="submit" className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
-                      <i className="fa-solid fa-plus"></i> Simpan Transaksi
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-              {/* Riwayat Kolom Kanan */}
-              <div className="lg:col-span-2">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Riwayat Transaksi</h3>
-                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{isLoading ? 'Memuat...' : `${transactions.length} Transaksi`}</span>
-                  </div>
-
-                  {isLoading ? (
-                    <div className="text-center py-16 px-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                      <p className="text-slate-500 font-medium">Menyelaraskan data...</p>
-                    </div>
-                  ) : transactions.length === 0 ? (
-                    <div className="text-center py-16 px-4">
-                      <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i className="fa-solid fa-file-lines text-slate-300 text-3xl"></i>
-                      </div>
-                      <h4 className="text-slate-900 font-medium mb-1">Belum ada transaksi</h4>
-                      <p className="text-slate-500 text-sm">Mulai catat pemasukan dan pengeluaran Anda.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {transactions.map((t) => {
-                        const isIncome = t.type === 'income';
-                        return (
-                          <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all gap-4">
-                            <div className="flex items-center gap-4">
-                              <div className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center w-12 h-12 ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                                {getCategoryIcon(t.category, t.type)}
-                              </div>
-                              <div>
-                                <p className="text-slate-900 font-semibold">{t.description}</p>
-                                <div className="flex items-center gap-2 text-sm text-slate-500 mt-0.5">
-                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-xs font-medium">{t.category}</span>
-                                  <span>•</span>
-                                  <span>{formatDate(t.date)}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between sm:justify-end gap-6 pl-14 sm:pl-0">
-                              <p className={`font-bold whitespace-nowrap ${isIncome ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                {isIncome ? '+' : '-'}{formatRupiah(t.amount)}
-                              </p>
-                              <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors sm:opacity-0 group-hover:opacity-100" title="Hapus">
-                                <i className="fa-solid fa-trash"></i>
-                              </button>
+              ) : (
+                <div className="space-y-4">
+                  {transactions.map((t) => {
+                    const isIncome = t.type === 'income';
+                    return (
+                      <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 rounded-xl flex-shrink-0 ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                            {getCategoryIcon(t.category, t.type)}
+                          </div>
+                          <div>
+                            <p className="text-slate-900 font-semibold">{t.description}</p>
+                            <div className="flex items-center gap-2 text-sm text-slate-500 mt-0.5">
+                              <span className="bg-slate-100 px-2 py-0.5 rounded-md text-xs font-medium">{t.category}</span>
+                              <span>•</span>
+                              <span>{formatDate(t.date)}</span>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
-      );
-    }
+                        </div>
 
-    // Eksekusi React ke dalam Div HTML
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-</body>
-</html>
+                        <div className="flex items-center justify-between sm:justify-end gap-6 pl-14 sm:pl-0">
+                          <p className={`font-bold whitespace-nowrap ${isIncome ? 'text-emerald-600' : 'text-slate-900'}`}>
+                            {isIncome ? '+' : '-'}{formatRupiah(t.amount)}
+                          </p>
+                          <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors sm:opacity-0 group-hover:opacity-100" title="Hapus Transaksi">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          
+        </div>
+      </main>
+    </div>
+  );
+}
