@@ -28,20 +28,12 @@
   <script type="text/babel">
     const { useState, useMemo, useEffect } = React;
 
-    // =========================================================================
-    // 🔴 PASTE URL DAN KEY SUPABASE ANDA DI SINI 🔴
-    // (Ganti teks di dalam tanda kutip dengan milik Anda dari dashboard Supabase)
-    // =========================================================================
+    // Inisialisasi Supabase
     const SUPABASE_URL = 'https://ecoelrgoywqmdiwqasbz.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjb2VscmdveXdxbWRpd3Fhc2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzQzODcsImV4cCI6MjA5NTYxMDM4N30.KL0brutSStLZHV80cOnEZ43DiC8_es25no8SlDkZTIA';
     
-    // Inisialisasi Supabase
-    let supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    let isSupabaseConfigured = true;
-    
-    if (isSupabaseConfigured) {
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    }
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const isSupabaseConfigured = true;
 
     // --- Format Bantuan ---
     const formatRupiah = (number) => {
@@ -92,8 +84,6 @@
 
       // 1. Cek Sesi Login saat website dibuka
       useEffect(() => {
-        if (!isSupabaseConfigured) return;
-
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session) {
             setUser(session.user);
@@ -116,7 +106,7 @@
 
       // 2. Ambil Data Transaksi dari Supabase jika sudah login
       useEffect(() => {
-        if (!isSupabaseConfigured || !isLoggedIn || !user) return;
+        if (!isLoggedIn || !user) return;
         
         const fetchTransactions = async () => {
           setIsLoading(true);
@@ -151,7 +141,7 @@
       // Simpan Transaksi Baru
       const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!amount || !description || !category || !date || !isSupabaseConfigured) return;
+        if (!amount || !description || !category || !date) return;
 
         setIsLoading(true);
         const newTransaction = {
@@ -180,8 +170,6 @@
 
       // Hapus Transaksi
       const handleDelete = async (id) => {
-        if (!isSupabaseConfigured) return;
-        
         const { error } = await supabase.from('transactions').delete().eq('id', id);
         if (!error) setTransactions(transactions.filter(t => t.id !== id));
       };
@@ -189,11 +177,6 @@
       // Proses Login / Daftar
       const handleAuth = async (e) => {
         e.preventDefault();
-        if (!isSupabaseConfigured) {
-          setAuthMessage({ text: "Error: URL/Key Supabase belum diisi di kode HTML.", type: 'error' });
-          return;
-        }
-
         setAuthMessage({ text: '', type: '' });
         setIsLoading(true);
 
@@ -214,7 +197,7 @@
       };
 
       const handleLogout = async () => {
-        if (isSupabaseConfigured) await supabase.auth.signOut();
+        await supabase.auth.signOut();
       };
 
       // TAMPILAN JIKA BELUM LOGIN
