@@ -75,12 +75,18 @@
       const [user, setUser] = useState(null);
       const [isLoading, setIsLoading] = useState(false);
 
+      // State Transaksi & Form
       const [transactions, setTransactions] = useState([]);
       const [type, setType] = useState('expense');
       const [amount, setAmount] = useState('');
       const [description, setDescription] = useState('');
       const [category, setCategory] = useState(categories.expense[0]);
       const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+      // State Filter & Pencarian
+      const [searchTerm, setSearchTerm] = useState('');
+      const [filterMonth, setFilterMonth] = useState('all');
+      const [filterYear, setFilterYear] = useState('all');
 
       // 1. Cek Sesi Login saat website dibuka
       useEffect(() => {
@@ -125,9 +131,33 @@
         fetchTransactions();
       }, [isLoggedIn, user]);
 
-      // Kalkulasi Uang
+      // 3. Logika Filter & Pencarian
+      const availableYears = useMemo(() => {
+        const years = transactions.map(t => new Date(t.date).getFullYear());
+        return [...new Set(years)].sort((a, b) => b - a);
+      }, [transactions]);
+
+      const filteredTransactions = useMemo(() => {
+        return transactions.filter(t => {
+          // Pencarian (Cek deskripsi atau kategori)
+          const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                t.category.toLowerCase().includes(searchTerm.toLowerCase());
+          
+          // Filter Tanggal
+          const txDate = new Date(t.date);
+          const txMonth = (txDate.getMonth() + 1).toString().padStart(2, '0');
+          const txYear = txDate.getFullYear().toString();
+
+          const matchesMonth = filterMonth === 'all' || txMonth === filterMonth;
+          const matchesYear = filterYear === 'all' || txYear === filterYear;
+
+          return matchesSearch && matchesMonth && matchesYear;
+        });
+      }, [transactions, searchTerm, filterMonth, filterYear]);
+
+      // Kalkulasi Uang berdasarkan data yang sudah di-filter
       const { totalIncome, totalExpense, balance } = useMemo(() => {
-        return transactions.reduce((acc, curr) => {
+        return filteredTransactions.reduce((acc, curr) => {
           const numAmount = parseFloat(curr.amount);
           if (curr.type === 'income') {
             acc.totalIncome += numAmount; acc.balance += numAmount;
@@ -136,7 +166,37 @@
           }
           return acc;
         }, { totalIncome: 0, totalExpense: 0, balance: 0 });
-      }, [transactions]);
+      }, [filteredTransactions]);
+
+      // Handle Export CSV
+      const handleExportCSV = () => {
+        if (filteredTransactions.length === 0) {
+          alert("Tidak ada data untuk diexport!");
+          return;
+        }
+
+        const headers = ['Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Nominal (Rp)'];
+        const csvRows = filteredTransactions.map(t => [
+          t.date,
+          t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+          t.category,
+          `"${t.description}"`, // Diberi kutip agar jika ada koma tidak error di Excel
+          t.amount
+        ]);
+
+        // Gabungkan Header dan Data
+        const csvContent = headers.join(',') + '\n' + csvRows.map(row => row.join(',')).join('\n');
+        
+        // Buat Blob dan Link untuk Download (BOM \uFEFF agar Excel bisa baca karakter khusus)
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Laporan_FinansialKu_${filterMonth}_${filterYear}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
 
       // Simpan Transaksi Baru
       const handleSubmit = async (e) => {
@@ -186,10 +246,7 @@
               email, password, options: { data: { name } }
             });
             
-            // Cek error dari Supabase
             if (error) throw error;
-            
-            // Cek apakah user benar-benar terbuat
             if (!data.user) {
               throw new Error("Pendaftaran ditolak oleh sistem. Cek pengaturan Email di Supabase.");
             }
@@ -199,7 +256,6 @@
           } else {
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
-            // Jika sukses, useEffect akan otomatis mendeteksi login
           }
         } catch (err) {
           console.error("Auth Error:", err);
@@ -294,19 +350,19 @@
 
           <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 flex flex-col justify-between">
+              <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200 flex flex-col justify-between transition-all">
                 <div className="flex items-center gap-2 text-indigo-100 mb-2">
                   <i className="fa-solid fa-wallet text-lg"></i><h2 className="font-medium">Total Saldo</h2>
                 </div>
                 <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
               </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all">
                 <div className="flex items-center gap-2 text-slate-500 mb-2">
                   <div className="bg-emerald-100 p-1.5 rounded-lg text-emerald-600"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan</h2>
                 </div>
                 <p className="text-2xl font-bold text-slate-900">{formatRupiah(totalIncome)}</p>
               </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between">
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all">
                 <div className="flex items-center gap-2 text-slate-500 mb-2">
                   <div className="bg-rose-100 p-1.5 rounded-lg text-rose-600"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran</h2>
                 </div>
@@ -315,6 +371,7 @@
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* --- Kolom Kiri: Form Input --- */}
               <div className="lg:col-span-1">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-24">
                   <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600"></i> Catat Transaksi</h3>
@@ -361,27 +418,73 @@
                 </div>
               </div>
 
+              {/* --- Kolom Kanan: Riwayat & Filter --- */}
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Riwayat Transaksi</h3>
-                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{transactions.length} Transaksi</span>
+                  
+                  {/* Header & Export Button */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold text-slate-900">Riwayat Transaksi</h3>
+                      <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{filteredTransactions.length} Data</span>
+                    </div>
+                    <button onClick={handleExportCSV} className="text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
+                      <i className="fa-solid fa-download"></i> Export CSV
+                    </button>
                   </div>
 
+                  {/* Filter & Search Bar */}
+                  <div className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    {/* Search Input */}
+                    <div className="flex-1 relative">
+                      <i className="fa-solid fa-search absolute left-3 top-3 text-slate-400"></i>
+                      <input 
+                        type="text" 
+                        placeholder="Cari transaksi (contoh: Nasi Padang)..." 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                      />
+                    </div>
+                    {/* Dropdowns */}
+                    <div className="flex gap-3">
+                      <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="bg-white border border-slate-200 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none">
+                        <option value="all">Semua Bulan</option>
+                        <option value="01">Januari</option>
+                        <option value="02">Februari</option>
+                        <option value="03">Maret</option>
+                        <option value="04">April</option>
+                        <option value="05">Mei</option>
+                        <option value="06">Juni</option>
+                        <option value="07">Juli</option>
+                        <option value="08">Agustus</option>
+                        <option value="09">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12">Desember</option>
+                      </select>
+                      <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="bg-white border border-slate-200 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 md:flex-none">
+                        <option value="all">Semua Tahun</option>
+                        {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* List Transaksi */}
                   {isLoading && transactions.length === 0 ? (
                     <div className="text-center py-16 px-4">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
                       <p className="text-slate-500 font-medium">Memuat data...</p>
                     </div>
-                  ) : transactions.length === 0 ? (
-                    <div className="text-center py-16 px-4">
+                  ) : filteredTransactions.length === 0 ? (
+                    <div className="text-center py-16 px-4 border-2 border-dashed border-slate-100 rounded-xl">
                       <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-file-lines text-slate-300 text-3xl"></i></div>
-                      <h4 className="text-slate-900 font-medium mb-1">Belum ada transaksi</h4>
-                      <p className="text-slate-500 text-sm">Mulai catat pemasukan dan pengeluaran Anda.</p>
+                      <h4 className="text-slate-900 font-medium mb-1">Tidak ada transaksi ditemukan</h4>
+                      <p className="text-slate-500 text-sm">Coba ubah filter bulan, tahun, atau kata kunci pencarian.</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {transactions.map((t) => {
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                      {filteredTransactions.map((t) => {
                         const isIncome = t.type === 'income';
                         return (
                           <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all gap-4">
@@ -416,5 +519,22 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
+
+  <style>
+    /* Agar scrollbar terlihat bersih dan menyatu dengan desain Tailwind */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent; 
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1; 
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8; 
+    }
+  </style>
 </body>
 </html>
