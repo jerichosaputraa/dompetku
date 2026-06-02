@@ -155,6 +155,9 @@
       const [toast, setToast] = useState(null);
       const [confirmAction, setConfirmAction] = useState(null);
 
+      // --- STATE PRIVACY BLUR ---
+      const [isPrivacyMode, setIsPrivacyMode] = useState(() => localStorage.getItem('privacyMode') === 'true');
+
       // State Transaksi
       const [transactions, setTransactions] = useState([]);
       const [type, setType] = useState('expense');
@@ -200,10 +203,18 @@
 
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
 
+      // Kelas CSS untuk memburamkan layar
+      const privacyFilter = isPrivacyMode ? "blur-[6px] select-none opacity-70 pointer-events-none transition-all duration-300" : "transition-all duration-300";
+
       const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
       };
+
+      // Simpan status mode privasi di lokal
+      useEffect(() => {
+        localStorage.setItem('privacyMode', isPrivacyMode);
+      }, [isPrivacyMode]);
 
       // Efek inisialisasi invoice No otomatis
       useEffect(() => {
@@ -801,6 +812,12 @@
                   <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
                 </div>
                 <div className="flex items-center gap-3">
+                  
+                  {/* Tombol Privacy Blur */}
+                  <button onClick={() => setIsPrivacyMode(!isPrivacyMode)} className={`p-2 rounded-lg transition-colors ${isPrivacyMode ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Penyamaran Saldo">
+                    <i className={`fa-solid ${isPrivacyMode ? 'fa-eye-slash' : 'fa-eye'} text-lg`}></i>
+                  </button>
+
                   <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
                     Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
                   </div>
@@ -832,7 +849,7 @@
                   <div className="flex gap-4 overflow-x-auto custom-scrollbar pb-4 snap-x">
                     <div className="snap-start min-w-[260px] bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-6 text-white shadow-lg flex flex-col justify-between shrink-0 border border-indigo-500">
                       <div className="flex items-center gap-2 text-indigo-200 mb-4"><i className="fa-solid fa-layer-group text-lg"></i><h2 className="font-medium">Total Keseluruhan</h2></div>
-                      <p className="text-3xl font-bold tracking-tight">{formatRupiah(balance)}</p>
+                      <p className={`text-3xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(balance)}</p>
                     </div>
                     {wallets.map(w => (
                       <div key={w} className="snap-start min-w-[220px] bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between shrink-0">
@@ -840,7 +857,7 @@
                           <div className="bg-slate-100 dark:bg-slate-700 w-8 h-8 rounded-lg flex items-center justify-center text-indigo-500"><i className="fa-solid fa-wallet"></i></div>
                           <h2 className="font-medium truncate">{w}</h2>
                         </div>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(walletBalances[w] || 0)}</p>
+                        <p className={`text-2xl font-bold text-slate-900 dark:text-white ${privacyFilter}`}>{formatRupiah(walletBalances[w] || 0)}</p>
                       </div>
                     ))}
                   </div>
@@ -849,17 +866,17 @@
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan Global</h2></div>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalIncome)}</p>
+                    <p className={`text-2xl font-bold text-slate-900 dark:text-white ${privacyFilter}`}>{formatRupiah(totalIncome)}</p>
                   </div>
                   <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-rose-100 dark:bg-rose-900/40 p-1.5 rounded-lg text-rose-600 dark:text-rose-400"><i className="fa-solid fa-arrow-trend-up"></i></div><h2 className="font-medium">Pengeluaran Global</h2></div>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(totalExpense)}</p>
+                    <p className={`text-2xl font-bold text-slate-900 dark:text-white ${privacyFilter}`}>{formatRupiah(totalExpense)}</p>
                   </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm mb-8">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-chart-pie text-indigo-600 dark:text-indigo-400"></i> Analisis Kategori</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 ${privacyFilter}`}>
                     <div><h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pengeluaran</h4><TransactionChart transactions={filteredTransactions} type="expense" isDarkMode={isDarkMode} /></div>
                     <div><h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center mb-4">Pemasukan</h4><TransactionChart transactions={filteredTransactions} type="income" isDarkMode={isDarkMode} /></div>
                   </div>
@@ -949,7 +966,7 @@
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 mt-3 sm:mt-0 pl-16 sm:pl-0 shrink-0">
-                                <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
+                                <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'} ${privacyFilter}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
                                 <div className="flex gap-1">
                                   {/* Tombol Cepat Menuju Kuitansi */}
                                   <button onClick={() => handleLoadToInvoice(t)} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
@@ -972,7 +989,7 @@
                 <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                   <div className="relative z-10">
                     <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
-                    <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">{formatRupiah(totalSavingsCollected)}</h2>
+                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalSavingsCollected)}</h2>
                     <p className="mt-4 text-emerald-100 text-sm">Uang ini tersimpan aman di luar Saldo Aktif Anda.</p>
                   </div>
                 </div>
@@ -1016,7 +1033,10 @@
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-600'}`}><i className={`fa-solid ${isCompleted ? 'fa-trophy' : 'fa-piggy-bank'} text-xl`}></i></div>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{goal.title}</h3>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{goal.deadline ? `Target: ${formatDate(goal.deadline)}` : 'Tanpa batas waktu'}</p>
-                            <div className="mb-2 flex justify-between text-sm font-medium"><span className={isCompleted ? 'text-amber-500' : 'text-emerald-600'}>{formatRupiah(current)}</span><span className="text-slate-400">{formatRupiah(target)}</span></div>
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={`${isCompleted ? 'text-amber-500' : 'text-emerald-600'} ${privacyFilter}`}>{formatRupiah(current)}</span>
+                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
+                            </div>
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
                             {isCompleted ? (
                               <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
@@ -1067,7 +1087,7 @@
                       <div className="text-rose-500 bg-rose-100 dark:bg-rose-900/40 w-12 h-12 rounded-xl flex items-center justify-center mb-4"><i className="fa-solid fa-fire-flame-curved text-xl"></i></div>
                       <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Kategori Terboros</h3>
                       <p className="text-2xl font-bold text-slate-900 dark:text-white mb-2 truncate">{insights.biggestCat || 'Belum ada'}</p>
-                      <p className="text-sm text-rose-600 dark:text-rose-400 font-medium">{insights.biggestCatAmount > 0 ? `Total: ${formatRupiah(insights.biggestCatAmount)}` : '-'}</p>
+                      <p className={`text-sm text-rose-600 dark:text-rose-400 font-medium ${privacyFilter}`}>{insights.biggestCatAmount > 0 ? `Total: ${formatRupiah(insights.biggestCatAmount)}` : '-'}</p>
                     </div>
                     
                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
@@ -1080,7 +1100,7 @@
                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                       <div className="text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40 w-12 h-12 rounded-xl flex items-center justify-center mb-4"><i className="fa-solid fa-percent text-xl"></i></div>
                       <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Rasio Menabung</h3>
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{insights.savingsRatio}%</p>
+                      <p className={`text-2xl font-bold text-slate-900 dark:text-white mb-2 ${privacyFilter}`}>{insights.savingsRatio}%</p>
                       <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Dari pemasukan bulan ini tersimpan.</p>
                     </div>
                   </div>
