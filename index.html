@@ -504,6 +504,65 @@
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
+      // --- LOGIKA EKSPOR KALENDER (.ICS) ---
+      const handleExportCalendar = () => {
+        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//FinansialKu//ID\nCALSCALE:GREGORIAN\n";
+        let hasEvents = false;
+
+        // 1. Ekspor Tenggat Tabungan
+        savingsGoals.forEach(goal => {
+          if (goal.deadline && parseFloat(goal.current_amount || 0) < parseFloat(goal.target_amount || 0)) {
+            const d = new Date(goal.deadline);
+            if (!isNaN(d.getTime())) {
+              const dateStr = d.toISOString().replace(/[-:]/g, '').substring(0, 8);
+              icsContent += "BEGIN:VEVENT\n";
+              icsContent += `SUMMARY:Tenggat Tabungan: ${goal.title}\n`;
+              icsContent += `DTSTART;VALUE=DATE:${dateStr}\n`;
+              icsContent += `DTEND;VALUE=DATE:${dateStr}\n`;
+              icsContent += `DESCRIPTION:Selesaikan target tabungan sebesar ${formatRupiah(goal.target_amount)} untuk ${goal.title}. Jangan menyerah!\n`;
+              icsContent += "END:VEVENT\n";
+              hasEvents = true;
+            }
+          }
+        });
+
+        // 2. Ekspor Reminder Cicilan (Dibuat otomatis tanggal 1 bulan depan)
+        installments.forEach(inst => {
+          const total = parseFloat(inst.total_amount) || 0;
+          const paid = parseFloat(inst.paid_amount) || 0;
+          if (paid < total) {
+            const d = new Date();
+            d.setMonth(d.getMonth() + 1);
+            d.setDate(1); // Set sebagai pengingat di tanggal 1 bulan depan
+            const dateStr = d.toISOString().replace(/[-:]/g, '').substring(0, 8);
+            
+            icsContent += "BEGIN:VEVENT\n";
+            icsContent += `SUMMARY:Bayar Cicilan: ${inst.item_name}\n`;
+            icsContent += `DTSTART;VALUE=DATE:${dateStr}\n`;
+            icsContent += `DTEND;VALUE=DATE:${dateStr}\n`;
+            icsContent += `DESCRIPTION:Anda memiliki sisa tagihan sebesar ${formatRupiah(total - paid)} untuk cicilan ${inst.item_name}. Segera bayar untuk menghindari denda.\n`;
+            icsContent += "END:VEVENT\n";
+            hasEvents = true;
+          }
+        });
+
+        icsContent += "END:VCALENDAR";
+
+        if (!hasEvents) {
+          showToast("Tidak ada tabungan aktif atau cicilan untuk diekspor ke kalender.", "error");
+          return;
+        }
+
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "Jadwal_FinansialKu.ics";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("Jadwal (.ics) berhasil diunduh! Buka file untuk sinkronisasi.");
+      };
+
       const handleSubmit = async (e) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount.toString().replace(/\./g, ''));
@@ -521,7 +580,6 @@
           setAmount(''); setDescription(''); setDate(getLocalDateString());
           showToast("Transaksi berhasil dicatat!");
           
-          // --- TRIGGER INCOME SPLITTER ---
           if (type === 'income' && numericAmount >= 100000) {
             setIncomeSplitter({ isOpen: true, amount: numericAmount });
           }
@@ -1821,6 +1879,10 @@
                 <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 p-6 mb-8">
                   <h3 className="text-lg font-bold text-rose-700 dark:text-rose-400 mb-4 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> Manajemen Data & Keamanan</h3>
                   <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                      <div><p className="font-medium text-slate-900 dark:text-white">Sinkronisasi Kalender (.ics)</p><p className="text-sm text-slate-500 dark:text-slate-400">Ekspor jadwal tenggat tabungan & pengingat cicilan bulan depan ke kalender Anda.</p></div>
+                      <button onClick={handleExportCalendar} className="mt-3 sm:mt-0 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-regular fa-calendar-plus mr-1.5"></i> Jadwal Kalender</button>
+                    </div>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
                       <div><p className="font-medium text-slate-900 dark:text-white">Ekspor Data (CSV)</p><p className="text-sm text-slate-500 dark:text-slate-400">Unduh seluruh riwayat transaksi Anda untuk diolah di Excel.</p></div>
                       <button onClick={handleExportCSV} className="mt-3 sm:mt-0 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-download mr-1.5"></i> Unduh Data</button>
