@@ -54,6 +54,22 @@
       return `${year}-${month}-${day}`;
     };
 
+    // Fungsi Pengubah Nominal Angka menjadi Teks Terbilang Bahasa Indonesia
+    const terbilang = (nilai) => {
+      const bilangan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+      let temp = "";
+      if (nilai < 12) { temp = " " + bilangan[nilai]; }
+      else if (nilai < 20) { temp = terbilang(nilai - 10) + " Belas"; }
+      else if (nilai < 100) { temp = terbilang(Math.floor(nilai / 10)) + " Puluh" + terbilang(nilai % 10); }
+      else if (nilai < 200) { temp = " Seratus" + terbilang(nilai - 100); }
+      else if (nilai < 1000) { temp = terbilang(Math.floor(nilai / 100)) + " Ratus" + terbilang(nilai % 100); }
+      else if (nilai < 2000) { temp = " Seribu" + terbilang(nilai - 1000); }
+      else if (nilai < 1000000) { temp = terbilang(Math.floor(nilai / 1000)) + " Ribu" + terbilang(nilai % 1000); }
+      else if (nilai < 1000000000) { temp = terbilang(Math.floor(nilai / 1000000)) + " Juta" + terbilang(nilai % 1000000); }
+      else if (nilai < 1000000000000) { temp = terbilang(Math.floor(nilai / 1000000000)) + " Milyar" + terbilang(parseFloat(nilai % 1000000000)); }
+      return temp.trim();
+    };
+
     const defaultCategories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
       expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Lainnya']
@@ -149,7 +165,6 @@
       
       // State Kategori & Dompet
       const [categories, setCategories] = useState(defaultCategories);
-      
       const [wallets, setWallets] = useState(defaultWallets);
       const [selectedWallet, setSelectedWallet] = useState(defaultWallets[0]);
       
@@ -173,12 +188,30 @@
       const [newCategoryType, setNewCategoryType] = useState('expense');
       const [newWalletName, setNewWalletName] = useState('');
 
+      // --- STATE KHUSUS KUITANSI GENERATOR ---
+      const [invoiceNo, setInvoiceNo] = useState('');
+      const [invoiceType, setInvoiceType] = useState('expense'); // expense (keluar) atau income (masuk)
+      const [invoiceParty, setInvoiceParty] = useState(''); // Pihak kedua (penerima/penyetor)
+      const [invoiceAmount, setInvoiceAmount] = useState('');
+      const [invoiceDesc, setInvoiceDesc] = useState('');
+      const [invoiceDate, setInvoiceDate] = useState(getLocalDateString());
+      const [invoiceWallet, setInvoiceWallet] = useState(defaultWallets[0]);
+      const [invoiceNote, setInvoiceNote] = useState('Kuitansi ini sah dihasilkan secara digital melalui sistem FinansialKu.');
+
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
 
       const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
       };
+
+      // Efek inisialisasi invoice No otomatis
+      useEffect(() => {
+        if (!invoiceNo) {
+          const rand = Math.floor(100000 + Math.random() * 900000);
+          setInvoiceNo(`INV/${new Date().getFullYear()}/${rand}`);
+        }
+      }, [activeTab]);
 
       useEffect(() => {
         if (isDarkMode) { document.documentElement.classList.add('dark'); localStorage.setItem('darkMode', 'true'); } 
@@ -224,8 +257,10 @@
         if (savedWallets) {
           const parsedW = JSON.parse(savedWallets);
           setWallets(parsedW); setSelectedWallet(parsedW[0]);
+          setInvoiceWallet(parsedW[0]);
         } else {
           setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]);
+          setInvoiceWallet(defaultWallets[0]);
         }
       };
 
@@ -293,13 +328,11 @@
         let expenses = filteredTransactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
         let savings = filteredTransactions.filter(t => t.type === 'expense' && t.category === 'Tabungan');
 
-        // Kategori Terboros
         let catMap = {};
         expenses.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + parseFloat(t.amount));
         let biggestCat = Object.keys(catMap).reduce((a, b) => catMap[a] > catMap[b] ? a : b, null);
         let biggestCatAmount = biggestCat ? catMap[biggestCat] : 0;
 
-        // Hari Terboros
         let dayMap = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
         const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
         expenses.forEach(t => {
@@ -310,7 +343,6 @@
         let biggestDayAmount = dayMap[biggestDayIdx];
         let biggestDayName = biggestDayAmount > 0 ? dayNames[biggestDayIdx] : '-';
 
-        // Rasio Menabung
         let totalSaved = savings.reduce((acc, t) => acc + parseFloat(t.amount), 0);
         let savingsRatio = 0;
         if (totalIncome > 0) {
@@ -352,7 +384,7 @@
         const { data, error } = await supabase.from('transactions').insert([newTx]).select();
         
         if (error) {
-          showToast("Gagal menyimpan data! Pastikan SQL 'ALTER TABLE' sudah dijalankan.", "error");
+          showToast("Gagal menyimpan data! Hubungkan Supabase dengan benar.", "error");
           console.error("Supabase Error:", error);
         } else if (data) {
           setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
@@ -543,6 +575,135 @@
         if (selectedWallet === wName) setSelectedWallet(updatedList[0]);
       };
 
+      // --- KONEKSI SINKRONISASI DENGAN TRANSAKSI AKTIF ---
+      const handleLoadToInvoice = (t) => {
+        setInvoiceType(t.type);
+        setInvoiceAmount(formatInputNumber(t.amount.toString()));
+        setInvoiceDesc(t.description);
+        setInvoiceDate(t.date);
+        setInvoiceWallet(t.wallet || 'Dompet Utama');
+        setInvoiceParty(t.type === 'income' ? 'Diterima Dari: Pengirim Dana' : 'Dibayarkan Kepada: Penerima Dana');
+        setActiveTab('invoice');
+        showToast("Data transaksi berhasil dimuat ke kuitansi!");
+      };
+
+      // --- CETAK PDF DENGAN WINDOW.PRINT SECARA PRO ---
+      const handlePrintInvoice = () => {
+        const rawAmount = parseFloat(invoiceAmount.replace(/\./g, '')) || 0;
+        const spelledOut = rawAmount > 0 ? terbilang(rawAmount) + " Rupiah" : "Nol Rupiah";
+        const currentUserName = user?.user_metadata?.name || 'Staff FinansialKu';
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Kuitansi ${invoiceNo}</title>
+              <script src="https://cdn.tailwindcss.com"><\/script>
+              <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+              <style>
+                @media print {
+                  body { background: white; color: black; }
+                  .no-print { display: none; }
+                }
+              </style>
+            </head>
+            <body class="bg-white text-slate-800 p-8 flex justify-center items-center min-h-screen">
+              <div class="max-w-4xl w-full border-4 border-double border-slate-400 p-8 rounded-3xl relative bg-white">
+                
+                <!-- Torn strip border effect -->
+                <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-slate-200 to-transparent"></div>
+
+                <!-- Receipt Header -->
+                <div class="flex justify-between items-start border-b-2 border-slate-200 pb-6 mb-6">
+                  <div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-indigo-700 uppercase flex items-center gap-2">
+                      <i class="fa-solid fa-wallet"></i> FinansialKu
+                    </h1>
+                    <p class="text-xs text-slate-500 mt-1 font-mono">Digital Receipt Platform</p>
+                  </div>
+                  <div class="text-right">
+                    <h2 class="text-xl font-bold text-slate-800 uppercase tracking-widest">Kuitansi Pembayaran</h2>
+                    <p class="text-sm font-mono text-slate-500 mt-1">No: ${invoiceNo}</p>
+                  </div>
+                </div>
+
+                <!-- Receipt Grid -->
+                <div class="space-y-4 text-sm">
+                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Tanggal</span>
+                    <span class="col-span-3 font-semibold">${formatDate(invoiceDate)}</span>
+                  </div>
+
+                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">
+                      ${invoiceType === 'income' ? 'Diterima Dari' : 'Dibayarkan Kepada'}
+                    </span>
+                    <span class="col-span-3 font-bold text-slate-900 text-lg">${invoiceParty || '-'}</span>
+                  </div>
+
+                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Uang Sejumlah</span>
+                    <span class="col-span-3 font-medium text-slate-700 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 block">
+                      *** ${spelledOut} ***
+                    </span>
+                  </div>
+
+                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
+                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Untuk Keperluan</span>
+                    <span class="col-span-3 font-semibold text-slate-800">${invoiceDesc || '-'}</span>
+                  </div>
+                </div>
+
+                <!-- Stamp & Total Section -->
+                <div class="flex flex-col sm:flex-row justify-between items-center mt-10 pt-6 border-t-2 border-slate-200 gap-6">
+                  
+                  <!-- Total Container -->
+                  <div class="bg-indigo-50 border-2 border-indigo-200 px-6 py-4 rounded-2xl flex items-center gap-3 shrink-0">
+                    <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider">Jumlah</span>
+                    <span class="text-2xl font-extrabold text-indigo-900">${formatRupiah(rawAmount)}</span>
+                  </div>
+
+                  <!-- Stamp & Signatures -->
+                  <div class="flex items-center gap-12 text-center relative">
+                    
+                    <!-- Skewed LUNAS stamp -->
+                    <div class="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-600/90 uppercase font-black tracking-widest text-lg px-4 py-1.5 rounded-xl rotate-[-12deg] select-none bg-white/40 backdrop-blur-xs">
+                      <i class="fa-solid fa-circle-check mr-1.5"></i> LUNAS
+                    </div>
+
+                    <div class="w-36">
+                      <p class="text-xs text-slate-400 uppercase tracking-widest mb-10">Metode Dana</p>
+                      <p class="font-bold text-slate-700 text-sm border-b border-slate-300 pb-1">${invoiceWallet}</p>
+                    </div>
+
+                    <div class="w-36">
+                      <p class="text-xs text-slate-400 uppercase tracking-widest mb-10">Penanggung Jawab</p>
+                      <p class="font-bold text-slate-900 text-sm border-b border-slate-300 pb-1">${currentUserName}</p>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- Additional Note -->
+                <div class="mt-8 pt-4 border-t border-slate-100 flex justify-between items-center text-slate-400 text-xs">
+                  <p>${invoiceNote}</p>
+                  <p class="font-mono text-[10px] tracking-tight text-slate-300">Generated on FinansialKu App</p>
+                </div>
+
+              </div>
+
+              <!-- Float Print Button (Inside New Tab Only) -->
+              <div class="fixed bottom-6 right-6 no-print">
+                <button onclick="window.print();" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-2xl flex items-center gap-2 transition-all">
+                  <i class="fa-solid fa-print"></i> Cetak Sekarang
+                </button>
+              </div>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      };
+
 
       if (!isLoggedIn) {
         return (
@@ -653,6 +814,7 @@
                 <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
                 <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Target Tabungan</button>
                 <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan Pintar</button>
+                <button onClick={() => setActiveTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
                 <button onClick={() => setActiveTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
               </div>
             </div>
@@ -704,6 +866,7 @@
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Form Tambah Transaksi */}
                   <div className="lg:col-span-1">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-plus text-indigo-600 dark:text-indigo-400"></i> Catat Transaksi</h3>
@@ -747,6 +910,7 @@
                     </div>
                   </div>
 
+                  {/* List Riwayat Transaksi */}
                   <div className="lg:col-span-2">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Riwayat Transaksi <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full ml-2">{filteredTransactions.length} Data</span></h3>
@@ -786,7 +950,11 @@
                               </div>
                               <div className="flex items-center gap-4 mt-3 sm:mt-0 pl-16 sm:pl-0 shrink-0">
                                 <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
-                                <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                                <div className="flex gap-1">
+                                  {/* Tombol Cepat Menuju Kuitansi */}
+                                  <button onClick={() => handleLoadToInvoice(t)} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
+                                  <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus"><i className="fa-solid fa-trash"></i></button>
+                                </div>
                               </div>
                             </div>
                           )
@@ -920,10 +1088,174 @@
               </div>
             )}
 
+            {/* ===================== TAB KUITANSI (PDF GENERATOR) ===================== */}
+            {activeTab === 'invoice' && (
+              <div className="animate-fade-in">
+                
+                {/* Judul Tab */}
+                <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-8 text-white shadow-lg mb-8 relative overflow-hidden">
+                  <i className="fa-solid fa-file-invoice-dollar text-6xl text-indigo-400/30 absolute -right-2 -top-2"></i>
+                  <div className="relative z-10">
+                    <h2 className="text-3xl font-bold tracking-tight mb-2">Pembuat Kuitansi Digital</h2>
+                    <p className="text-indigo-200 text-sm">Hasilkan & simpan bukti transaksi legal berformat PDF secara instan.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                  
+                  {/* Formulir Pengisian Kuitansi */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
+                    <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-4">
+                      <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-pen-to-square text-indigo-600"></i> Atur Detail Kuitansi</h3>
+                      <button onClick={() => {
+                        const rand = Math.floor(100000 + Math.random() * 900000);
+                        setInvoiceNo(`INV/${new Date().getFullYear()}/${rand}`);
+                      }} className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold" title="Generate ulang nomor">
+                        <i className="fa-solid fa-rotate mr-1"></i> No Baru
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nomor Invoice</label>
+                        <input type="text" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="block w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tipe Transaksi</label>
+                        <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value)} className="block w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                          <option value="expense">Pengeluaran (Debet)</option>
+                          <option value="income">Pemasukan (Kredit)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        {invoiceType === 'income' ? 'Diterima Dari' : 'Dibayarkan Kepada'}
+                      </label>
+                      <input type="text" value={invoiceParty} onChange={(e) => setInvoiceParty(e.target.value)} placeholder="Contoh: Budi Santoso / PT Sukses Makmur" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nominal (Rp)</label>
+                        <input type="text" inputMode="numeric" value={invoiceAmount} onChange={(e) => setInvoiceAmount(formatInputNumber(e.target.value))} placeholder="Contoh: 150.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm font-semibold" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tanggal Cetak</label>
+                        <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Metode / Sumber Dana</label>
+                        <select value={invoiceWallet} onChange={(e) => setInvoiceWallet(e.target.value)} className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                          {wallets.map(w => <option key={w} value={w}>{w}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Keperluan Pembayaran</label>
+                        <input type="text" value={invoiceDesc} onChange={(e) => setInvoiceDesc(e.target.value)} placeholder="Contoh: Pembelian Laptop Kantor" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Catatan Tambahan (Kaki Kuitansi)</label>
+                      <textarea value={invoiceNote} onChange={(e) => setInvoiceNote(e.target.value)} rows="2" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm resize-none"></textarea>
+                    </div>
+
+                    <button onClick={handlePrintInvoice} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all">
+                      <i className="fa-solid fa-print"></i> Cetak & Ekspor PDF
+                    </button>
+                  </div>
+
+                  {/* REALTIME LIVE PREVIEW (Estetika Kertas Nota/Kuitansi) */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Pratinjau Kuitansi (Live Preview)</h3>
+                    
+                    <div className="bg-white text-slate-800 border-2 border-slate-200/60 p-6 sm:p-8 rounded-2xl shadow-xl relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white to-slate-50 border-double border-4">
+                      
+                      {/* Sobek Kertas Efek */}
+                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-[linear-gradient(45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%),linear-gradient(-45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%)] bg-[length:12px_12px] opacity-10"></div>
+
+                      {/* Header Preview */}
+                      <div className="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
+                        <div>
+                          <span className="text-xs font-black tracking-widest text-indigo-600 uppercase flex items-center gap-1.5">
+                            <i className="fa-solid fa-wallet"></i> FinansialKu
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono block mt-0.5">E-RECEIPT SYSTEM</span>
+                        </div>
+                        <div className="text-right">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Kuitansi Pembayaran</h4>
+                          <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{invoiceNo || 'INV/XXXX'}</span>
+                        </div>
+                      </div>
+
+                      {/* Detail Data */}
+                      <div className="space-y-3.5 text-xs">
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">Tanggal:</span>
+                          <span className="font-semibold text-slate-700">{formatDate(invoiceDate)}</span>
+                        </div>
+
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">
+                            {invoiceType === 'income' ? 'Diterima Dari:' : 'Dibayarkan Kepada:'}
+                          </span>
+                          <span className="font-bold text-slate-900">{invoiceParty || '-'}</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-slate-400 font-medium block">Uang Sejumlah:</span>
+                          <span className="font-semibold text-slate-700 italic bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/60 block text-[11px] leading-relaxed text-center">
+                            *** {invoiceAmount ? terbilang(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Nol'} Rupiah ***
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">Untuk Keperluan:</span>
+                          <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">{invoiceDesc || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* Footer Cetak & Signatures */}
+                      <div className="flex justify-between items-end mt-8 pt-5 border-t border-slate-200">
+                        
+                        {/* Jumlah Besar */}
+                        <div className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2">
+                          <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Total</span>
+                          <span className="text-lg font-black tracking-tight">
+                            {invoiceAmount ? formatRupiah(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Rp 0'}
+                          </span>
+                        </div>
+
+                        {/* Stempel Sukses/LUNAS Skewed */}
+                        <div className="flex items-center gap-4 text-center relative select-none">
+                          <div className="absolute -left-12 -top-5 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
+                            LUNAS
+                          </div>
+                          <div className="w-24">
+                            <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
+                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{user?.user_metadata?.name || 'Staff'}</span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
             {/* ===================== TAB PENGATURAN ===================== */}
             {activeTab === 'settings' && (
               <div className="animate-fade-in max-w-3xl mx-auto space-y-8">
                 
+                {/* Bagian Akun */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-circle-user text-indigo-500"></i> Akun Saya</h3>
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-700">
@@ -942,6 +1274,7 @@
                   </form>
                 </div>
 
+                {/* Bagian Tampilan */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-palette text-indigo-500"></i> Tampilan Visual</h3>
@@ -952,6 +1285,7 @@
                   </button>
                 </div>
 
+                {/* Bagian Manajemen Dompet */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-wallet text-indigo-500"></i> Kelola Dompet / Sumber Dana</h3>
@@ -973,6 +1307,7 @@
                   </div>
                 </div>
 
+                {/* Bagian Kategori Kustom */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-tags text-indigo-500"></i> Kelola Kategori</h3>
