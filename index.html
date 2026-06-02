@@ -72,7 +72,7 @@
 
     const defaultCategories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
-      expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Lainnya']
+      expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Cicilan', 'Lainnya']
     };
 
     const defaultWallets = ['Dompet Utama', 'BCA', 'GoPay', 'Tunai'];
@@ -88,6 +88,7 @@
         case 'Belanja': return <i className="fa-solid fa-bag-shopping text-xl"></i>;
         case 'Tagihan': return <i className="fa-solid fa-house text-xl"></i>;
         case 'Tabungan': return <i className="fa-solid fa-piggy-bank text-xl"></i>;
+        case 'Cicilan': return <i className="fa-solid fa-credit-card text-xl"></i>;
         default: return <i className="fa-solid fa-tag text-xl"></i>;
       }
     };
@@ -185,6 +186,13 @@
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
       const [topUpAmount, setTopUpAmount] = useState('');
 
+      // --- STATE CICILAN & PAYLATER ---
+      const [installments, setInstallments] = useState([]);
+      const [instName, setInstName] = useState('');
+      const [instTotalAmount, setInstTotalAmount] = useState('');
+      const [instTenor, setInstTenor] = useState('');
+      const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
+
       // Settings State
       const [profileName, setProfileName] = useState('');
       const [newCategoryName, setNewCategoryName] = useState('');
@@ -253,6 +261,9 @@
           
           const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
           if (svRes.data) setSavingsGoals(svRes.data);
+
+          const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+          if (instRes.data) setInstallments(instRes.data);
           
           setIsLoading(false);
         };
@@ -273,9 +284,11 @@
           const parsedW = JSON.parse(savedWallets);
           setWallets(parsedW); setSelectedWallet(parsedW[0]);
           setInvoiceWallet(parsedW[0]);
+          setInstPayModal(prev => ({...prev, wallet: parsedW[0]}));
         } else {
           setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]);
           setInvoiceWallet(defaultWallets[0]);
+          setInstPayModal(prev => ({...prev, wallet: defaultWallets[0]}));
         }
       };
 
@@ -336,6 +349,77 @@
         return savingsGoals.reduce((sum, goal) => sum + parseFloat(goal.current_amount || 0), 0);
       }, [savingsGoals]);
 
+      // --- LOGIKA CICILAN ---
+      const totalActiveDebt = useMemo(() => {
+        return installments.reduce((sum, inst) => sum + Math.max(0, parseFloat(inst.total_amount) - parseFloat(inst.paid_amount || 0)), 0);
+      }, [installments]);
+
+      const handleCreateInstallment = async (e) => {
+        e.preventDefault();
+        const numericTotal = parseFloat(instTotalAmount.replace(/\./g, ''));
+        const numericTenor = parseInt(instTenor);
+        if (!instName || !numericTotal || !numericTenor) return;
+
+        setIsLoading(true);
+        const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: 0, tenor_months: numericTenor, user_email: user.email };
+        const { data, error } = await supabase.from('installments').insert([newInst]).select();
+
+        if (error) {
+          showToast("Gagal! Pastikan tabel 'installments' sudah dibuat di SQL Editor Supabase.", "error");
+        } else if (data) {
+          setInstallments([...installments, data[0]]);
+          setInstName(''); setInstTotalAmount(''); setInstTenor('');
+          showToast("Cicilan baru berhasil dicatat!");
+        }
+        setIsLoading(false);
+      };
+
+      const handleDeleteInstallment = (id) => {
+        setConfirmAction({
+          title: "Hapus Data Cicilan?",
+          message: "Data cicilan ini akan dihapus dari daftar pantauan Anda.",
+          onConfirm: async () => {
+            const { error } = await supabase.from('installments').delete().eq('id', id);
+            if (error) showToast("Gagal menghapus cicilan!", "error");
+            else {
+              setInstallments(installments.filter(i => i.id !== id));
+              showToast("Cicilan dihapus.");
+            }
+          }
+        });
+      };
+
+      const handlePayInstallmentSubmit = async (e) => {
+        e.preventDefault();
+        const payVal = parseFloat(instPayModal.amount.replace(/\./g, ''));
+        if (!payVal || payVal <= 0) return;
+
+        setIsLoading(true);
+        const inst = installments.find(i => i.id === instPayModal.instId);
+        const newPaidAmount = parseFloat(inst.paid_amount) + payVal;
+
+        // 1. Update progress di tabel installments
+        const { error: err1 } = await supabase.from('installments').update({ paid_amount: newPaidAmount }).eq('id', inst.id);
+        
+        if (err1) {
+          showToast("Gagal mengupdate progress cicilan.", "error");
+          setIsLoading(false); return;
+        }
+
+        // 2. Tambah transaksi otomatis ke Beranda
+        const txDate = getLocalDateString();
+        const newTx = { type: 'expense', amount: payVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user.email };
+        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+
+        if (!err2) {
+          setInstallments(installments.map(i => i.id === inst.id ? { ...i, paid_amount: newPaidAmount } : i));
+          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+          setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
+          showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(payVal.toString())}!`);
+        }
+        setIsLoading(false);
+      };
+
       // --- LOGIKA LAPORAN PINTAR (SMART INSIGHTS) ---
       const insights = useMemo(() => {
         if (filteredTransactions.length === 0) return null;
@@ -371,11 +455,10 @@
       const emergencyFund = useMemo(() => {
         if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
         
-        // Ambil semua pengeluaran (tidak terikat filter bulan saat ini)
         const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
         let monthlyExpensesMap = {};
         expenses.forEach(t => {
-            const monthKey = t.date.substring(0, 7); // Format YYYY-MM
+            const monthKey = t.date.substring(0, 7); 
             monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount);
         });
         
@@ -383,17 +466,13 @@
         let totalAllExpenses = 0;
         Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
         
-        // Rata-rata pengeluaran bulanan
         let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
         
-        // Total Dana Saat Ini (Saldo Global + Tabungan Global)
         let globalBalance = transactions.reduce((acc, curr) => {
             return curr.type === 'income' ? acc + parseFloat(curr.amount) : acc - parseFloat(curr.amount);
         }, 0);
         
         let globalTotalFunds = globalBalance + totalSavingsCollected;
-        
-        // Estimasi Kekuatan Bertahan (Bulan)
         let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
 
         return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
@@ -473,69 +552,6 @@
         });
       };
 
-      const handleCreateGoal = async (e) => {
-        e.preventDefault();
-        const numericTarget = parseFloat(goalTarget.replace(/\./g, ''));
-        if (!goalTitle || !numericTarget) return;
-        
-        setIsLoading(true);
-        const newGoal = { title: goalTitle, target_amount: numericTarget, current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
-        const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
-        
-        if (error) showToast("Gagal membuat kantong tabungan!", "error");
-        else if (data) {
-          setSavingsGoals([...savingsGoals, data[0]]);
-          setGoalTitle(''); setGoalTarget(''); setGoalDeadline('');
-          showToast("Kantong tabungan berhasil dibuat!");
-        }
-        setIsLoading(false);
-      };
-
-      const handleDeleteGoal = (id) => {
-        setConfirmAction({
-          title: "Hapus Kantong Tabungan?",
-          message: "Kantong tabungan ini akan dihapus. (Uang tidak akan kembali otomatis ke saldo utama)",
-          onConfirm: async () => {
-            const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-            if (error) showToast("Gagal menghapus tabungan!", "error");
-            else {
-              setSavingsGoals(savingsGoals.filter(g => g.id !== id));
-              showToast("Kantong tabungan dihapus.");
-            }
-          }
-        });
-      };
-
-      const handleTopUpSubmit = async (e) => {
-        e.preventDefault();
-        const topUpVal = parseFloat(topUpAmount.replace(/\./g, ''));
-        if (!topUpVal || topUpVal <= 0) return;
-        
-        setIsLoading(true);
-        const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
-        const newCurrent = parseFloat(goal.current_amount) + topUpVal;
-
-        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
-        
-        if (err1 || (updatedData && updatedData.length === 0)) {
-          showToast("Gagal memindahkan uang ke tabungan.", "error");
-          setIsLoading(false); return;
-        }
-        
-        const txDate = getLocalDateString();
-        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: wallets[0], user_email: user.email };
-        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
-
-        if (!err2) {
-          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' });
-          setTopUpAmount('');
-          showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
-        }
-        setIsLoading(false);
-      };
-
       const handleAuth = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -576,50 +592,6 @@
           showToast("Profil berhasil diperbarui!");
         }
         setIsLoading(false);
-      };
-
-      const handleAddCategory = (e) => {
-        e.preventDefault();
-        if (!newCategoryName.trim()) return;
-        const currentList = categories[newCategoryType];
-        if (currentList.includes(newCategoryName.trim())) {
-          showToast("Kategori sudah ada!", "error"); return;
-        }
-        const updated = { ...categories, [newCategoryType]: [...currentList, newCategoryName.trim()] };
-        saveCustomCategories(updated);
-        setNewCategoryName('');
-        showToast("Kategori baru ditambahkan.");
-      };
-
-      const handleDeleteCategory = (catName, catType) => {
-        if (defaultCategories[catType].includes(catName)) {
-          showToast("Kategori bawaan tidak bisa dihapus.", "error"); return;
-        }
-        const updatedList = categories[catType].filter(c => c !== catName);
-        const updated = { ...categories, [catType]: updatedList };
-        saveCustomCategories(updated);
-        if (category === catName) setCategory(defaultCategories[catType][0]);
-      };
-
-      const handleAddWallet = (e) => {
-        e.preventDefault();
-        if (!newWalletName.trim()) return;
-        if (wallets.includes(newWalletName.trim())) {
-          showToast("Dompet sudah ada!", "error"); return;
-        }
-        const updated = [...wallets, newWalletName.trim()];
-        saveWallets(updated);
-        setNewWalletName('');
-        showToast("Dompet baru ditambahkan.");
-      };
-
-      const handleDeleteWallet = (wName) => {
-        if (wName === 'Dompet Utama' || wallets.length <= 1) {
-          showToast("Dompet utama / dompet terakhir tidak bisa dihapus.", "error"); return;
-        }
-        const updatedList = wallets.filter(w => w !== wName);
-        saveWallets(updatedList);
-        if (selectedWallet === wName) setSelectedWallet(updatedList[0]);
       };
 
       // --- KONEKSI SINKRONISASI DENGAN TRANSAKSI AKTIF ---
@@ -898,6 +870,32 @@
             </div>
           )}
 
+          {/* Modal Pembayaran Cicilan */}
+          {instPayModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up border-t-4 border-violet-500">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Bayar Cicilan</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pembayaran untuk <strong className="text-violet-600 dark:text-violet-400">{instPayModal.instName}</strong>.</p>
+                <form onSubmit={handlePayInstallmentSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal Bayar (Rp)</label>
+                    <input type="text" inputMode="numeric" value={instPayModal.amount} onChange={(e) => setInstPayModal({...instPayModal, amount: formatInputNumber(e.target.value)})} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-violet-500 text-slate-900 dark:text-white" placeholder="Contoh: 500.000" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Dari Dompet</label>
+                    <select value={instPayModal.wallet} onChange={(e) => setInstPayModal({...instPayModal, wallet: e.target.value})} required className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                      {wallets.map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-3 mt-8">
+                    <button type="button" onClick={() => setInstPayModal({isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0]})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-violet-600 hover:bg-violet-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Bayar Sekarang'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* Modal Top Up Tabungan */}
           {topUpModal.isOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -944,8 +942,9 @@
               
               <div className="flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
                 <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
-                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Target Tabungan</button>
-                <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan Pintar</button>
+                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
+                <button onClick={() => setActiveTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
+                <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
                 <button onClick={() => setActiveTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
                 <button onClick={() => setActiveTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
               </div>
@@ -1174,6 +1173,124 @@
                               <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
                             ) : (
                               <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================== TAB CICILAN & PAYLATER ===================== */}
+            {activeTab === 'installments' && (
+              <div className="animate-fade-in">
+                <div className="bg-violet-600 dark:bg-violet-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                  <div className="relative z-10">
+                    <p className="text-violet-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Hutang Aktif</p>
+                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalActiveDebt)}</h2>
+                    <p className="mt-4 text-violet-100 text-sm">Pantau dan kelola beban tagihan bulanan Anda di sini.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Form Tambah Cicilan */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-file-signature text-violet-500"></i> Catat Cicilan Baru</h3>
+                      <form onSubmit={handleCreateInstallment} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Barang / Tagihan</label>
+                          <input type="text" value={instName} onChange={(e) => setInstName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: Shopee Paylater iPhone" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Total Hutang (Rp)</label>
+                          <input type="text" inputMode="numeric" value={instTotalAmount} onChange={(e) => setInstTotalAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Termasuk biaya admin/bunga" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tenor (Bulan)</label>
+                          <input type="number" value={instTenor} onChange={(e) => setInstTenor(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: 12" />
+                        </div>
+                        
+                        {/* Auto Rekomendasi Cicilan */}
+                        {instTotalAmount && instTenor && parseInt(instTenor) > 0 && (
+                          <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl border border-violet-100 dark:border-violet-800">
+                            <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Estimasi Cicilan per Bulan:</p>
+                            <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.replace(/\./g, '')) / parseInt(instTenor)))}</p>
+                          </div>
+                        )}
+
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Data Cicilan'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* List Cicilan */}
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {installments.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-credit-card text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Tidak Ada Beban Hutang</h4>
+                        <p className="text-slate-500 text-sm">Hebat! Pertahankan kondisi finansial sehat ini.</p>
+                      </div>
+                    ) : (
+                      installments.map(inst => {
+                        const total = parseFloat(inst.total_amount);
+                        const paid = parseFloat(inst.paid_amount || 0);
+                        const progress = Math.min((paid / total) * 100, 100);
+                        const isCompleted = paid >= total;
+                        
+                        const monthlyRec = Math.ceil(total / parseInt(inst.tenor_months));
+                        // Estimasi bulan ke berapa yang sudah dibayar
+                        const monthsPaid = Math.min(Math.floor(paid / monthlyRec), parseInt(inst.tenor_months));
+                        
+                        return (
+                          <div key={inst.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
+                            <button onClick={() => handleDeleteInstallment(inst.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-violet-100 text-violet-600'}`}>
+                              <i className={`fa-solid ${isCompleted ? 'fa-check-double' : 'fa-credit-card'} text-xl`}></i>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{inst.item_name}</h3>
+                            
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                              {isCompleted ? 'Hutang Lunas!' : `Cicilan ${monthsPaid} dari ${inst.tenor_months} bln`}
+                            </p>
+                            
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={`${isCompleted ? 'text-emerald-600' : 'text-violet-600'} ${privacyFilter}`}>{formatRupiah(paid)}</span>
+                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(total)}</span>
+                            </div>
+                            
+                            {/* Progress Bar */}
+                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
+                              <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-violet-500'}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+                            
+                            {isCompleted ? (
+                              <div className="w-full py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm text-center">
+                                <i className="fa-solid fa-check-circle mr-1.5"></i> Pembayaran Selesai
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => {
+                                    setInstPayModal({
+                                      isOpen: true, 
+                                      instId: inst.id, 
+                                      instName: inst.item_name, 
+                                      amount: formatInputNumber(monthlyRec.toString()),
+                                      wallet: wallets[0]
+                                    });
+                                  }} 
+                                  className="flex-1 py-2.5 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <i className="fa-solid fa-money-bill-wave"></i> Bayar
+                                </button>
+                              </div>
                             )}
                           </div>
                         )
