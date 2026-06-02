@@ -206,8 +206,7 @@
       const [selectedEventId, setSelectedEventId] = useState('');
 
       // --- STATE KALKULATOR PATUNGAN (SPLIT BILL) ---
-      const [splitSubtotal, setSplitSubtotal] = useState('');
-      const [splitTaxService, setSplitTaxService] = useState('');
+      const [splitGrandTotal, setSplitGrandTotal] = useState('');
       const [splitPersons, setSplitPersons] = useState([
         { id: 1, name: 'Saya', amount: '' },
         { id: 2, name: 'Teman 1', amount: '' }
@@ -447,37 +446,41 @@
         setSplitPersons(splitPersons.map(p => p.id === id ? { ...p, [field]: value } : p));
       };
 
+      const splitTotals = useMemo(() => {
+        const grandTotal = parseFloat(splitGrandTotal.toString().replace(/\./g, '')) || 0;
+        const sumPesanan = splitPersons.reduce((sum, p) => sum + (parseFloat(p.amount.toString().replace(/\./g, '')) || 0), 0);
+        return {
+          grandTotal,
+          sumPesanan,
+          isMatch: sumPesanan === grandTotal,
+          difference: Math.abs(grandTotal - sumPesanan),
+          isDiscount: grandTotal < sumPesanan
+        };
+      }, [splitGrandTotal, splitPersons]);
+
       const splitResults = useMemo(() => {
-        const sub = parseFloat(splitSubtotal.toString().replace(/\./g, '')) || 0;
-        const taxService = parseFloat(splitTaxService.toString().replace(/\./g, '')) || 0;
+        const sumPesanan = splitTotals.sumPesanan;
+        const grandTotal = splitTotals.grandTotal;
         
-        if (sub === 0) return splitPersons.map(p => ({ ...p, totalToPay: 0 }));
+        if (sumPesanan === 0) return splitPersons.map(p => ({ ...p, totalToPay: 0 }));
         
         return splitPersons.map(p => {
            const pAmt = parseFloat(p.amount.toString().replace(/\./g, '')) || 0;
-           // Proporsikan pajak berdasarkan pesanan masing-masing
-           const pTax = (pAmt / sub) * taxService;
+           // Proporsikan total akhir berdasarkan pesanan masing-masing (bisa diskon atau pajak/ongkir)
+           const totalToPay = (pAmt / sumPesanan) * grandTotal;
            return {
               ...p,
-              totalToPay: pAmt + pTax
+              totalToPay
            };
         });
-      }, [splitSubtotal, splitTaxService, splitPersons]);
-
-      const splitTotals = useMemo(() => {
-        const subInput = parseFloat(splitSubtotal.toString().replace(/\./g, '')) || 0;
-        const taxInput = parseFloat(splitTaxService.toString().replace(/\./g, '')) || 0;
-        const sumPesanan = splitPersons.reduce((sum, p) => sum + (parseFloat(p.amount.toString().replace(/\./g, '')) || 0), 0);
-        return {
-          grandTotal: subInput + taxInput,
-          sumPesanan,
-          isMatch: sumPesanan === subInput,
-          difference: Math.abs(subInput - sumPesanan)
-        };
-      }, [splitSubtotal, splitTaxService, splitPersons]);
+      }, [splitTotals, splitPersons]);
 
       const handleCopySplitBill = () => {
-         let text = `*Tagihan Patungan*\nTotal: ${formatRupiah(splitTotals.grandTotal)}\n\nRincian Tagihan:\n`;
+         let text = `*Tagihan Patungan*\nTotal Akhir: ${formatRupiah(splitTotals.grandTotal)}\n`;
+         if (splitTotals.sumPesanan !== splitTotals.grandTotal) {
+            text += `(Total Pesanan Menu: ${formatRupiah(splitTotals.sumPesanan)})\n`;
+         }
+         text += `\nRincian Proporsional:\n`;
          splitResults.forEach(p => {
             text += `- ${p.name}: ${formatRupiah(p.totalToPay)}\n`;
          });
@@ -1596,7 +1599,7 @@
                 <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                    <div className="relative z-10">
                      <h2 className="text-3xl font-black mb-2">Kalkulator Patungan (Split Bill)</h2>
-                     <p className="text-fuchsia-100">Hitung patungan nongkrong dengan adil, termasuk pembagian proporsi pajak dan layanan.</p>
+                     <p className="text-fuchsia-100">Bagi tagihan proporsional secara otomatis dan adil ketika ada diskon voucher, pajak, atau ongkir.</p>
                    </div>
                    <i className="fa-solid fa-users-viewfinder text-9xl absolute -right-4 -bottom-4 text-white/10"></i>
                 </div>
@@ -1608,17 +1611,14 @@
                     
                     <div className="space-y-4 mb-8">
                       <div>
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Subtotal (Sebelum Pajak)</label>
-                        <input type="text" inputMode="numeric" value={splitSubtotal} onChange={(e) => setSplitSubtotal(formatInputNumber(e.target.value))} placeholder="Cth: 200.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Total Biaya Tambahan (Pajak + Layanan)</label>
-                        <input type="text" inputMode="numeric" value={splitTaxService} onChange={(e) => setSplitTaxService(formatInputNumber(e.target.value))} placeholder="Cth: 30.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Total Tagihan Akhir (Yang Dibayar ke Kasir / Driver)</label>
+                        <input type="text" inputMode="numeric" value={splitGrandTotal} onChange={(e) => setSplitGrandTotal(formatInputNumber(e.target.value))} placeholder="Cth: 48.000" className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500 font-bold text-lg" />
+                        <p className="text-xs text-slate-500 mt-2">Masukkan harga final setelah dipotong voucher atau ditambah ongkir/pajak.</p>
                       </div>
                     </div>
 
                     <div className="flex justify-between items-end mb-4">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-users text-fuchsia-600 dark:text-fuchsia-400"></i> Daftar Pesanan</h3>
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-users text-fuchsia-600 dark:text-fuchsia-400"></i> Daftar Pesanan Asli</h3>
                       <button onClick={handleAddPerson} className="text-sm text-fuchsia-600 dark:text-fuchsia-400 font-bold bg-fuchsia-50 dark:bg-fuchsia-900/30 px-3 py-1.5 rounded-lg hover:bg-fuchsia-100 transition-colors">
                         <i className="fa-solid fa-plus mr-1"></i> Tambah Orang
                       </button>
@@ -1629,7 +1629,7 @@
                         <div key={p.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
                           <div className="flex-1 space-y-2">
                             <input type="text" value={p.name} onChange={(e) => handlePersonChange(p.id, 'name', e.target.value)} placeholder="Nama Teman" className="w-full bg-transparent border-b border-slate-300 dark:border-slate-600 px-2 py-1 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-fuchsia-500" />
-                            <input type="text" inputMode="numeric" value={p.amount} onChange={(e) => handlePersonChange(p.id, 'amount', formatInputNumber(e.target.value))} placeholder="Total harga pesanannya" className="w-full bg-white dark:bg-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
+                            <input type="text" inputMode="numeric" value={p.amount} onChange={(e) => handlePersonChange(p.id, 'amount', formatInputNumber(e.target.value))} placeholder="Harga pesanan asli di menu" className="w-full bg-white dark:bg-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
                           </div>
                           {splitPersons.length > 2 && (
                             <button onClick={() => handleRemovePerson(p.id)} className="text-slate-400 hover:text-rose-500 p-2 shrink-0"><i className="fa-solid fa-xmark text-lg"></i></button>
@@ -1641,18 +1641,21 @@
 
                   {/* Right: Results */}
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-calculator text-fuchsia-600 dark:text-fuchsia-400"></i> Hasil Pembagian</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-calculator text-fuchsia-600 dark:text-fuchsia-400"></i> Hasil Pembagian Proporsional</h3>
                     
                     <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 flex-1">
                        <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-4">
-                         <span className="text-slate-500 dark:text-slate-400 font-medium">Grand Total</span>
+                         <span className="text-slate-500 dark:text-slate-400 font-medium">Grand Total Dibayar</span>
                          <span className={`text-2xl font-black text-fuchsia-600 dark:text-fuchsia-400 ${privacyFilter}`}>{formatRupiah(splitTotals.grandTotal)}</span>
                        </div>
 
                        {!splitTotals.isMatch && splitTotals.sumPesanan > 0 && (
-                         <div className="mb-4 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 p-3 rounded-xl text-xs font-medium border border-amber-200 dark:border-amber-800 flex items-start gap-2">
-                           <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
-                           <p>Total pesanan teman ({formatRupiah(splitTotals.sumPesanan)}) <strong>tidak sama</strong> dengan Subtotal ({formatRupiah(splitSubtotal.replace(/\./g, '') || 0)}). Selisih: {formatRupiah(splitTotals.difference)}.</p>
+                         <div className={`mb-4 p-3 rounded-xl text-xs font-medium border flex items-start gap-2 ${splitTotals.isDiscount ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'}`}>
+                           <i className={`fa-solid mt-0.5 ${splitTotals.isDiscount ? 'fa-tags' : 'fa-triangle-exclamation'}`}></i>
+                           <p>
+                             Total menu asli: {formatRupiah(splitTotals.sumPesanan)}. 
+                             Terdeteksi ada <strong>{splitTotals.isDiscount ? 'Diskon/Voucher' : 'Biaya Tambahan (Pajak/Ongkir)'}</strong> sebesar {formatRupiah(splitTotals.difference)}. Tagihan di bawah sudah disesuaikan secara proporsional!
+                           </p>
                          </div>
                        )}
 
