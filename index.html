@@ -205,6 +205,14 @@
       const [newEventBudget, setNewEventBudget] = useState('');
       const [selectedEventId, setSelectedEventId] = useState('');
 
+      // --- STATE KALKULATOR PATUNGAN (SPLIT BILL) ---
+      const [splitSubtotal, setSplitSubtotal] = useState('');
+      const [splitTaxService, setSplitTaxService] = useState('');
+      const [splitPersons, setSplitPersons] = useState([
+        { id: 1, name: 'Saya', amount: '' },
+        { id: 2, name: 'Teman 1', amount: '' }
+      ]);
+
       // Settings State
       const [profileName, setProfileName] = useState('');
       const [newCategoryName, setNewCategoryName] = useState('');
@@ -424,6 +432,68 @@
             }
           }
         });
+      };
+
+      // --- LOGIKA SPLIT BILL (KALKULATOR PATUNGAN) ---
+      const handleAddPerson = () => {
+        setSplitPersons([...splitPersons, { id: Date.now(), name: `Teman ${splitPersons.length + 1}`, amount: '' }]);
+      };
+      
+      const handleRemovePerson = (id) => {
+        setSplitPersons(splitPersons.filter(p => p.id !== id));
+      };
+      
+      const handlePersonChange = (id, field, value) => {
+        setSplitPersons(splitPersons.map(p => p.id === id ? { ...p, [field]: value } : p));
+      };
+
+      const splitResults = useMemo(() => {
+        const sub = parseFloat(splitSubtotal.toString().replace(/\./g, '')) || 0;
+        const taxService = parseFloat(splitTaxService.toString().replace(/\./g, '')) || 0;
+        
+        if (sub === 0) return splitPersons.map(p => ({ ...p, totalToPay: 0 }));
+        
+        return splitPersons.map(p => {
+           const pAmt = parseFloat(p.amount.toString().replace(/\./g, '')) || 0;
+           // Proporsikan pajak berdasarkan pesanan masing-masing
+           const pTax = (pAmt / sub) * taxService;
+           return {
+              ...p,
+              totalToPay: pAmt + pTax
+           };
+        });
+      }, [splitSubtotal, splitTaxService, splitPersons]);
+
+      const splitTotals = useMemo(() => {
+        const subInput = parseFloat(splitSubtotal.toString().replace(/\./g, '')) || 0;
+        const taxInput = parseFloat(splitTaxService.toString().replace(/\./g, '')) || 0;
+        const sumPesanan = splitPersons.reduce((sum, p) => sum + (parseFloat(p.amount.toString().replace(/\./g, '')) || 0), 0);
+        return {
+          grandTotal: subInput + taxInput,
+          sumPesanan,
+          isMatch: sumPesanan === subInput,
+          difference: Math.abs(subInput - sumPesanan)
+        };
+      }, [splitSubtotal, splitTaxService, splitPersons]);
+
+      const handleCopySplitBill = () => {
+         let text = `*Tagihan Patungan*\nTotal: ${formatRupiah(splitTotals.grandTotal)}\n\nRincian Tagihan:\n`;
+         splitResults.forEach(p => {
+            text += `- ${p.name}: ${formatRupiah(p.totalToPay)}\n`;
+         });
+         text += `\nYuk segera ditransfer ke rekening / e-wallet ku ya! 💸`;
+         
+         const textArea = document.createElement("textarea");
+         textArea.value = text;
+         document.body.appendChild(textArea);
+         textArea.select();
+         try {
+           document.execCommand('copy');
+           showToast("Rincian tagihan berhasil disalin ke Clipboard!");
+         } catch (err) {
+           showToast("Gagal menyalin teks.", "error");
+         }
+         document.body.removeChild(textArea);
       };
 
       const handleCreateInstallment = async (e) => {
@@ -1247,7 +1317,8 @@
                 <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
                 <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
                 <button onClick={() => setActiveTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
-                <button onClick={() => setActiveTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara Khusus</button>
+                <button onClick={() => setActiveTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara</button>
+                <button onClick={() => setActiveTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
                 <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
                 <button onClick={() => setActiveTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
                 <button onClick={() => setActiveTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
@@ -1514,6 +1585,90 @@
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* --- TAB: PATUNGAN (SPLIT BILL) FITUR BARU --- */}
+            {activeTab === 'splitbill' && (
+              <div className="animate-fade-in space-y-8">
+                <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                   <div className="relative z-10">
+                     <h2 className="text-3xl font-black mb-2">Kalkulator Patungan (Split Bill)</h2>
+                     <p className="text-fuchsia-100">Hitung patungan nongkrong dengan adil, termasuk pembagian proporsi pajak dan layanan.</p>
+                   </div>
+                   <i className="fa-solid fa-users-viewfinder text-9xl absolute -right-4 -bottom-4 text-white/10"></i>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Left: Input Form */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-receipt text-fuchsia-600 dark:text-fuchsia-400"></i> Detail Tagihan</h3>
+                    
+                    <div className="space-y-4 mb-8">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Subtotal (Sebelum Pajak)</label>
+                        <input type="text" inputMode="numeric" value={splitSubtotal} onChange={(e) => setSplitSubtotal(formatInputNumber(e.target.value))} placeholder="Cth: 200.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Total Biaya Tambahan (Pajak + Layanan)</label>
+                        <input type="text" inputMode="numeric" value={splitTaxService} onChange={(e) => setSplitTaxService(formatInputNumber(e.target.value))} placeholder="Cth: 30.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-end mb-4">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-users text-fuchsia-600 dark:text-fuchsia-400"></i> Daftar Pesanan</h3>
+                      <button onClick={handleAddPerson} className="text-sm text-fuchsia-600 dark:text-fuchsia-400 font-bold bg-fuchsia-50 dark:bg-fuchsia-900/30 px-3 py-1.5 rounded-lg hover:bg-fuchsia-100 transition-colors">
+                        <i className="fa-solid fa-plus mr-1"></i> Tambah Orang
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                      {splitPersons.map((p, index) => (
+                        <div key={p.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+                          <div className="flex-1 space-y-2">
+                            <input type="text" value={p.name} onChange={(e) => handlePersonChange(p.id, 'name', e.target.value)} placeholder="Nama Teman" className="w-full bg-transparent border-b border-slate-300 dark:border-slate-600 px-2 py-1 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-fuchsia-500" />
+                            <input type="text" inputMode="numeric" value={p.amount} onChange={(e) => handlePersonChange(p.id, 'amount', formatInputNumber(e.target.value))} placeholder="Total harga pesanannya" className="w-full bg-white dark:bg-slate-800 px-3 py-2 rounded-lg text-sm border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-fuchsia-500" />
+                          </div>
+                          {splitPersons.length > 2 && (
+                            <button onClick={() => handleRemovePerson(p.id)} className="text-slate-400 hover:text-rose-500 p-2 shrink-0"><i className="fa-solid fa-xmark text-lg"></i></button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right: Results */}
+                  <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-calculator text-fuchsia-600 dark:text-fuchsia-400"></i> Hasil Pembagian</h3>
+                    
+                    <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 flex-1">
+                       <div className="flex justify-between items-center mb-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+                         <span className="text-slate-500 dark:text-slate-400 font-medium">Grand Total</span>
+                         <span className={`text-2xl font-black text-fuchsia-600 dark:text-fuchsia-400 ${privacyFilter}`}>{formatRupiah(splitTotals.grandTotal)}</span>
+                       </div>
+
+                       {!splitTotals.isMatch && splitTotals.sumPesanan > 0 && (
+                         <div className="mb-4 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 p-3 rounded-xl text-xs font-medium border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+                           <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                           <p>Total pesanan teman ({formatRupiah(splitTotals.sumPesanan)}) <strong>tidak sama</strong> dengan Subtotal ({formatRupiah(splitSubtotal.replace(/\./g, '') || 0)}). Selisih: {formatRupiah(splitTotals.difference)}.</p>
+                         </div>
+                       )}
+
+                       <div className="space-y-3">
+                         {splitResults.map(p => (
+                           <div key={p.id} className="flex justify-between items-center bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                             <span className="font-bold text-slate-700 dark:text-slate-300">{p.name}</span>
+                             <span className={`font-bold text-slate-900 dark:text-white ${privacyFilter}`}>{formatRupiah(p.totalToPay)}</span>
+                           </div>
+                         ))}
+                       </div>
+                    </div>
+
+                    <button onClick={handleCopySplitBill} className="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3.5 px-4 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-fuchsia-200 dark:shadow-none">
+                      <i className="fa-regular fa-copy"></i> Salin Teks ke WhatsApp
+                    </button>
                   </div>
                 </div>
               </div>
