@@ -33,16 +33,23 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const isSupabaseConfigured = true;
 
+    // --- PROTEKSI ANTI-CRASH UNTUK FORMATTING ---
     const formatRupiah = (number) => {
-      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+      const parsed = parseFloat(number);
+      if (isNaN(parsed)) return 'Rp 0';
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(parsed);
     };
 
     const formatDate = (dateString) => {
-      return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (!dateString) return '-';
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString; 
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     };
 
     const formatInputNumber = (value) => {
-      const val = value.replace(/\D/g, ''); 
+      if (!value) return '';
+      const val = value.toString().replace(/\D/g, ''); 
       return val.replace(/\B(?=(\d{3})+(?!\d))/g, "."); 
     };
 
@@ -54,7 +61,6 @@
       return `${year}-${month}-${day}`;
     };
 
-    // Fungsi Pengubah Nominal Angka menjadi Teks Terbilang Bahasa Indonesia
     const terbilang = (nilai) => {
       const bilangan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
       let temp = "";
@@ -223,12 +229,10 @@
         setTimeout(() => setToast(null), 3000);
       };
 
-      // Simpan status mode privasi di lokal
       useEffect(() => {
         localStorage.setItem('privacyMode', isPrivacyMode);
       }, [isPrivacyMode]);
 
-      // Efek inisialisasi invoice No otomatis
       useEffect(() => {
         if (!invoiceNo) {
           const rand = Math.floor(100000 + Math.random() * 900000);
@@ -260,10 +264,10 @@
           if (txRes.data) setTransactions(txRes.data);
           
           const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-          if (svRes.data) setSavingsGoals(svRes.data);
+          if (svRes.data) setSavingsGoals(svRes.data || []); // Added fallback
 
           const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-          if (instRes.data) setInstallments(instRes.data);
+          if (instRes.data) setInstallments(instRes.data || []); // Added fallback
           
           setIsLoading(false);
         };
@@ -351,12 +355,12 @@
 
       // --- LOGIKA CICILAN ---
       const totalActiveDebt = useMemo(() => {
-        return installments.reduce((sum, inst) => sum + Math.max(0, parseFloat(inst.total_amount) - parseFloat(inst.paid_amount || 0)), 0);
+        return installments.reduce((sum, inst) => sum + Math.max(0, parseFloat(inst.total_amount || 0) - parseFloat(inst.paid_amount || 0)), 0);
       }, [installments]);
 
       const handleCreateInstallment = async (e) => {
         e.preventDefault();
-        const numericTotal = parseFloat(instTotalAmount.replace(/\./g, ''));
+        const numericTotal = parseFloat(instTotalAmount.toString().replace(/\./g, ''));
         const numericTenor = parseInt(instTenor);
         if (!instName || !numericTotal || !numericTenor) return;
 
@@ -391,14 +395,13 @@
 
       const handlePayInstallmentSubmit = async (e) => {
         e.preventDefault();
-        const payVal = parseFloat(instPayModal.amount.replace(/\./g, ''));
+        const payVal = parseFloat(instPayModal.amount.toString().replace(/\./g, ''));
         if (!payVal || payVal <= 0) return;
 
         setIsLoading(true);
         const inst = installments.find(i => i.id === instPayModal.instId);
-        const newPaidAmount = parseFloat(inst.paid_amount) + payVal;
+        const newPaidAmount = parseFloat(inst.paid_amount || 0) + payVal;
 
-        // 1. Update progress di tabel installments
         const { error: err1 } = await supabase.from('installments').update({ paid_amount: newPaidAmount }).eq('id', inst.id);
         
         if (err1) {
@@ -406,7 +409,6 @@
           setIsLoading(false); return;
         }
 
-        // 2. Tambah transaksi otomatis ke Beranda
         const txDate = getLocalDateString();
         const newTx = { type: 'expense', amount: payVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user.email };
         const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
@@ -428,21 +430,22 @@
         let savings = filteredTransactions.filter(t => t.type === 'expense' && t.category === 'Tabungan');
 
         let catMap = {};
-        expenses.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + parseFloat(t.amount));
+        expenses.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + parseFloat(t.amount || 0));
         let biggestCat = Object.keys(catMap).reduce((a, b) => catMap[a] > catMap[b] ? a : b, null);
         let biggestCatAmount = biggestCat ? catMap[biggestCat] : 0;
 
         let dayMap = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
         const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
         expenses.forEach(t => {
+            if(!t.date) return;
             const d = new Date(t.date).getDay();
-            dayMap[d] += parseFloat(t.amount);
+            dayMap[d] += parseFloat(t.amount || 0);
         });
         let biggestDayIdx = Object.keys(dayMap).reduce((a, b) => dayMap[a] > dayMap[b] ? a : b, 0);
         let biggestDayAmount = dayMap[biggestDayIdx];
         let biggestDayName = biggestDayAmount > 0 ? dayNames[biggestDayIdx] : '-';
 
-        let totalSaved = savings.reduce((acc, t) => acc + parseFloat(t.amount), 0);
+        let totalSaved = savings.reduce((acc, t) => acc + parseFloat(t.amount || 0), 0);
         let savingsRatio = 0;
         if (totalIncome > 0) {
             savingsRatio = ((totalSaved / totalIncome) * 100).toFixed(1);
@@ -458,8 +461,9 @@
         const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
         let monthlyExpensesMap = {};
         expenses.forEach(t => {
+            if(!t.date) return;
             const monthKey = t.date.substring(0, 7); 
-            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount);
+            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount || 0);
         });
         
         const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
@@ -469,7 +473,7 @@
         let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
         
         let globalBalance = transactions.reduce((acc, curr) => {
-            return curr.type === 'income' ? acc + parseFloat(curr.amount) : acc - parseFloat(curr.amount);
+            return curr.type === 'income' ? acc + parseFloat(curr.amount || 0) : acc - parseFloat(curr.amount || 0);
         }, 0);
         
         let globalTotalFunds = globalBalance + totalSavingsCollected;
@@ -502,7 +506,7 @@
 
       const handleSubmit = async (e) => {
         e.preventDefault();
-        const numericAmount = parseFloat(amount.replace(/\./g, ''));
+        const numericAmount = parseFloat(amount.toString().replace(/\./g, ''));
         if (!numericAmount || !description || !category || !date || !selectedWallet) return;
         
         setIsLoading(true);
@@ -552,6 +556,69 @@
         });
       };
 
+      const handleCreateGoal = async (e) => {
+        e.preventDefault();
+        const numericTarget = parseFloat(goalTarget.toString().replace(/\./g, ''));
+        if (!goalTitle || !numericTarget) return;
+        
+        setIsLoading(true);
+        const newGoal = { title: goalTitle, target_amount: numericTarget, current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
+        const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
+        
+        if (error) showToast("Gagal membuat kantong tabungan!", "error");
+        else if (data) {
+          setSavingsGoals([...savingsGoals, data[0]]);
+          setGoalTitle(''); setGoalTarget(''); setGoalDeadline('');
+          showToast("Kantong tabungan berhasil dibuat!");
+        }
+        setIsLoading(false);
+      };
+
+      const handleDeleteGoal = (id) => {
+        setConfirmAction({
+          title: "Hapus Kantong Tabungan?",
+          message: "Kantong tabungan ini akan dihapus. (Uang tidak akan kembali otomatis ke saldo utama)",
+          onConfirm: async () => {
+            const { error } = await supabase.from('savings_goals').delete().eq('id', id);
+            if (error) showToast("Gagal menghapus tabungan!", "error");
+            else {
+              setSavingsGoals(savingsGoals.filter(g => g.id !== id));
+              showToast("Kantong tabungan dihapus.");
+            }
+          }
+        });
+      };
+
+      const handleTopUpSubmit = async (e) => {
+        e.preventDefault();
+        const topUpVal = parseFloat(topUpAmount.toString().replace(/\./g, ''));
+        if (!topUpVal || topUpVal <= 0) return;
+        
+        setIsLoading(true);
+        const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
+        const newCurrent = parseFloat(goal.current_amount || 0) + topUpVal;
+
+        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
+        
+        if (err1 || (updatedData && updatedData.length === 0)) {
+          showToast("Gagal memindahkan uang ke tabungan.", "error");
+          setIsLoading(false); return;
+        }
+        
+        const txDate = getLocalDateString();
+        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: wallets[0], user_email: user.email };
+        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+
+        if (!err2) {
+          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
+          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' });
+          setTopUpAmount('');
+          showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
+        }
+        setIsLoading(false);
+      };
+
       const handleAuth = async (e) => {
         e.preventDefault();
         setIsLoading(true);
@@ -594,6 +661,50 @@
         setIsLoading(false);
       };
 
+      const handleAddCategory = (e) => {
+        e.preventDefault();
+        if (!newCategoryName.trim()) return;
+        const currentList = categories[newCategoryType];
+        if (currentList.includes(newCategoryName.trim())) {
+          showToast("Kategori sudah ada!", "error"); return;
+        }
+        const updated = { ...categories, [newCategoryType]: [...currentList, newCategoryName.trim()] };
+        saveCustomCategories(updated);
+        setNewCategoryName('');
+        showToast("Kategori baru ditambahkan.");
+      };
+
+      const handleDeleteCategory = (catName, catType) => {
+        if (defaultCategories[catType].includes(catName)) {
+          showToast("Kategori bawaan tidak bisa dihapus.", "error"); return;
+        }
+        const updatedList = categories[catType].filter(c => c !== catName);
+        const updated = { ...categories, [catType]: updatedList };
+        saveCustomCategories(updated);
+        if (category === catName) setCategory(defaultCategories[catType][0]);
+      };
+
+      const handleAddWallet = (e) => {
+        e.preventDefault();
+        if (!newWalletName.trim()) return;
+        if (wallets.includes(newWalletName.trim())) {
+          showToast("Dompet sudah ada!", "error"); return;
+        }
+        const updated = [...wallets, newWalletName.trim()];
+        saveWallets(updated);
+        setNewWalletName('');
+        showToast("Dompet baru ditambahkan.");
+      };
+
+      const handleDeleteWallet = (wName) => {
+        if (wName === 'Dompet Utama' || wallets.length <= 1) {
+          showToast("Dompet utama / dompet terakhir tidak bisa dihapus.", "error"); return;
+        }
+        const updatedList = wallets.filter(w => w !== wName);
+        saveWallets(updatedList);
+        if (selectedWallet === wName) setSelectedWallet(updatedList[0]);
+      };
+
       // --- KONEKSI SINKRONISASI DENGAN TRANSAKSI AKTIF ---
       const handleLoadToInvoice = (t) => {
         setInvoiceType(t.type);
@@ -608,7 +719,7 @@
 
       // --- CETAK PDF DENGAN WINDOW.PRINT SECARA PRO ---
       const handlePrintInvoice = () => {
-        const rawAmount = parseFloat(invoiceAmount.replace(/\./g, '')) || 0;
+        const rawAmount = parseFloat(invoiceAmount.toString().replace(/\./g, '')) || 0;
         const spelledOut = rawAmount > 0 ? terbilang(rawAmount) + " Rupiah" : "Nol Rupiah";
         const currentUserName = user?.user_metadata?.name || 'Staff FinansialKu';
 
@@ -788,7 +899,7 @@
               if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
               if (result.description) setDescription(result.description);
               if (result.date) setDate(result.date);
-              setType('expense'); // Biasakan struk di-scan untuk pengeluaran
+              setType('expense'); 
               showToast("Struk berhasil dipindai! Silakan cek formulir.");
             } else {
               throw new Error("Gagal mengekstrak teks.");
@@ -1138,6 +1249,10 @@
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
                           <input type="text" inputMode="numeric" value={goalTarget} onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 15.000.000" />
                         </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
+                          <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
                         <button type="submit" disabled={isLoading} className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
                           {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Buat Kantong Tabungan'}
                         </button>
@@ -1153,10 +1268,10 @@
                       </div>
                     ) : (
                       savingsGoals.map(goal => {
-                        const target = parseFloat(goal.target_amount);
-                        const current = parseFloat(goal.current_amount || 0);
-                        const progress = Math.min((current / target) * 100, 100);
-                        const isCompleted = current >= target;
+                        const target = parseFloat(goal.target_amount) || 0;
+                        const current = parseFloat(goal.current_amount) || 0;
+                        const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+                        const isCompleted = target > 0 && current >= target;
 
                         return (
                           <div key={goal.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
@@ -1217,7 +1332,7 @@
                         {instTotalAmount && instTenor && parseInt(instTenor) > 0 && (
                           <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl border border-violet-100 dark:border-violet-800">
                             <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Estimasi Cicilan per Bulan:</p>
-                            <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.replace(/\./g, '')) / parseInt(instTenor)))}</p>
+                            <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.toString().replace(/\./g, '')) / parseInt(instTenor)))}</p>
                           </div>
                         )}
 
@@ -1238,14 +1353,15 @@
                       </div>
                     ) : (
                       installments.map(inst => {
-                        const total = parseFloat(inst.total_amount);
-                        const paid = parseFloat(inst.paid_amount || 0);
-                        const progress = Math.min((paid / total) * 100, 100);
-                        const isCompleted = paid >= total;
+                        const total = parseFloat(inst.total_amount) || 0;
+                        const paid = parseFloat(inst.paid_amount) || 0;
+                        const progress = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
+                        const isCompleted = total > 0 && paid >= total;
                         
-                        const monthlyRec = Math.ceil(total / parseInt(inst.tenor_months));
+                        const tenor = parseInt(inst.tenor_months) || 1;
+                        const monthlyRec = Math.ceil(total / tenor);
                         // Estimasi bulan ke berapa yang sudah dibayar
-                        const monthsPaid = Math.min(Math.floor(paid / monthlyRec), parseInt(inst.tenor_months));
+                        const monthsPaid = monthlyRec > 0 ? Math.min(Math.floor(paid / monthlyRec), tenor) : 0;
                         
                         return (
                           <div key={inst.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
