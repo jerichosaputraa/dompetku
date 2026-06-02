@@ -367,6 +367,38 @@
         return { biggestCat, biggestCatAmount, biggestDayName, biggestDayAmount, savingsRatio, totalSaved };
       }, [filteredTransactions, totalIncome]);
 
+      // --- LOGIKA PELACAK DANA DARURAT (EMERGENCY FUND ANALYZER) ---
+      const emergencyFund = useMemo(() => {
+        if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
+        
+        // Ambil semua pengeluaran (tidak terikat filter bulan saat ini)
+        const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
+        let monthlyExpensesMap = {};
+        expenses.forEach(t => {
+            const monthKey = t.date.substring(0, 7); // Format YYYY-MM
+            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount);
+        });
+        
+        const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
+        let totalAllExpenses = 0;
+        Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
+        
+        // Rata-rata pengeluaran bulanan
+        let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
+        
+        // Total Dana Saat Ini (Saldo Global + Tabungan Global)
+        let globalBalance = transactions.reduce((acc, curr) => {
+            return curr.type === 'income' ? acc + parseFloat(curr.amount) : acc - parseFloat(curr.amount);
+        }, 0);
+        
+        let globalTotalFunds = globalBalance + totalSavingsCollected;
+        
+        // Estimasi Kekuatan Bertahan (Bulan)
+        let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
+
+        return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
+      }, [transactions, totalSavingsCollected]);
+
 
       const handleExportCSV = () => {
         if (filteredTransactions.length === 0) {
@@ -1205,6 +1237,33 @@
                     </div>
                   </div>
                 )}
+
+                {/* Analisis Dana Darurat */}
+                <div className="mt-6 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 shadow-xl border border-slate-700 relative overflow-hidden group">
+                  <div className="absolute -right-6 -top-6 text-slate-700/50 group-hover:text-slate-700/70 transition-colors">
+                    <i className="fa-solid fa-shield-halved text-9xl"></i>
+                  </div>
+                  <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6">
+                    <div className="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center shrink-0 border border-blue-500/30">
+                      <i className="fa-solid fa-truck-medical text-3xl"></i>
+                    </div>
+                    <div className="flex-1 text-center sm:text-left">
+                      <h3 className="text-lg font-bold text-white mb-1">Pelacak Dana Darurat (Emergency Fund)</h3>
+                      <p className="text-slate-400 text-sm mb-3">Berdasarkan rata-rata pengeluaran Anda sebesar <strong className={`text-slate-200 ${privacyFilter}`}>{formatRupiah(emergencyFund.avgMonthlyExpense)}/bulan</strong>.</p>
+                      <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
+                        <span className="bg-slate-950/50 border border-slate-700 px-3 py-1.5 rounded-lg text-sm text-slate-300">
+                          Total Dana Tersedia: <strong className={`text-white ${privacyFilter}`}>{formatRupiah(emergencyFund.globalTotalFunds)}</strong>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-center bg-slate-950/40 p-4 rounded-xl border border-slate-700/50 min-w-[140px]">
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Daya Tahan</p>
+                      <p className={`text-3xl font-black ${emergencyFund.survivalMonths >= 6 ? 'text-emerald-400' : emergencyFund.survivalMonths >= 3 ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {emergencyFund.survivalMonths} <span className="text-lg font-medium text-slate-500">Bln</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
