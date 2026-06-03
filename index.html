@@ -498,13 +498,14 @@
         showToast("AI sedang meriset harga di internet...", "info");
 
         try {
-          const apiKey = ""; 
+          const apiKey = ""; // Kunci API otomatis disisipkan di lingkungan Canvas
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
-          const prompt = `Bertindaklah sebagai agen travel ahli. Berikan estimasi rata-rata biaya liburan ke ${newTripDest} per hari dalam mata uang Rupiah. Kembalikan HANYA format JSON valid tanpa markdown atau backtick, dengan struktur tepat seperti ini: { "hotel": integer, "transport": integer, "makan": integer, "notes": "catatan singkat 1-2 kalimat tentang harga di sana" }`;
+          const prompt = `Berikan estimasi rata-rata biaya liburan ke ${newTripDest} per hari.`;
 
           const payload = {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: "Bertindaklah sebagai agen travel ahli. Kembalikan HANYA format JSON valid tanpa markdown atau backtick, dengan struktur tepat seperti ini: { \"hotel\": integer, \"transport\": integer, \"makan\": integer, \"notes\": \"catatan singkat 1-2 kalimat tentang harga dalam rupiah di sana\" }" }] },
             generationConfig: {
               responseMimeType: "application/json",
               responseSchema: {
@@ -526,7 +527,11 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
               });
-              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+              if (!res.ok) {
+                 const errData = await res.json().catch(()=>({}));
+                 console.error("API Error Response:", errData);
+                 throw new Error(`HTTP error! status: ${res.status}`);
+              }
               return await res.json();
             } catch (error) {
               if (retries > 0) {
@@ -541,8 +546,11 @@
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           
           if (text) {
-            const result = JSON.parse(text);
+            // Bersihkan teks dari markdown jika AI masih menyertakannya
+            const cleanText = text.replace(/```json/gi, '').replace(/```/gi, '').trim();
+            const result = JSON.parse(cleanText);
             const totalPerHari = (result.hotel || 0) + (result.transport || 0) + (result.makan || 0);
+            
             // Asumsi liburan 3 hari sebagai rekomendasi dasar
             const rekomendasiTotal = totalPerHari * 3;
             
@@ -553,8 +561,8 @@
             throw new Error("Gagal mendapat respon AI.");
           }
         } catch (error) {
-          console.error(error);
-          showToast("Gagal melakukan riset harga.", "error");
+          console.error("Error Detail:", error);
+          showToast("Gagal melakukan riset harga. Jika dijalankan di luar Canvas, pastikan API Key valid.", "error");
         } finally {
           setIsScouting(false);
         }
@@ -2334,7 +2342,7 @@
 
                         {/* Stempel Sukses/LUNAS Skewed */}
                         <div className="flex items-center gap-4 text-center relative select-none">
-                          <div className="absolute -left-12 -top-5 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
+                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
                             LUNAS
                           </div>
                           <div className="w-24">
