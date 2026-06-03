@@ -205,6 +205,13 @@
       const [newEventBudget, setNewEventBudget] = useState('');
       const [selectedEventId, setSelectedEventId] = useState('');
 
+      // --- STATE TRIP PLANNER (PERENCANA PERJALANAN) ---
+      const [trips, setTrips] = useState([]);
+      const [newTripName, setNewTripName] = useState('');
+      const [newTripBudget, setNewTripBudget] = useState('');
+      const [newTripDest, setNewTripDest] = useState('');
+      const [newTripDate, setNewTripDate] = useState('');
+
       // --- STATE KALKULATOR PATUNGAN (SPLIT BILL) ---
       const [splitGrandTotal, setSplitGrandTotal] = useState('');
       const [splitPersons, setSplitPersons] = useState([
@@ -288,6 +295,10 @@
           // Fetch Events
           const evRes = await supabase.from('events').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
           if (evRes.data) setEvents(evRes.data || []);
+
+          // Fetch Trips
+          const trRes = await supabase.from('trips').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
+          if (trRes.data) setTrips(trRes.data || []);
           
           setIsLoading(false);
         };
@@ -428,6 +439,47 @@
               showToast("Acara telah dihapus.");
             } else {
               showToast("Gagal menghapus acara.", "error");
+            }
+          }
+        });
+      };
+
+      // --- LOGIKA TRIP PLANNER (PERENCANA PERJALANAN) ---
+      const handleCreateTrip = async (e) => {
+        e.preventDefault();
+        const budget = parseFloat(newTripBudget.toString().replace(/\./g, ''));
+        if (!newTripName || isNaN(budget) || !newTripDest || !newTripDate) return;
+
+        setIsLoading(true);
+        const { data, error } = await supabase.from('trips').insert([{ 
+          trip_name: newTripName, 
+          budget_limit: budget, 
+          destination: newTripDest,
+          date: newTripDate,
+          user_email: user.email 
+        }]).select();
+
+        if (error) {
+          showToast("Gagal membuat rencana. Pastikan tabel trips sudah dibuat di Supabase!", "error");
+        } else if (data) {
+          setTrips([data[0], ...trips]);
+          setNewTripName(''); setNewTripBudget(''); setNewTripDest(''); setNewTripDate('');
+          showToast("Rencana perjalanan baru berhasil dibuat!");
+        }
+        setIsLoading(false);
+      };
+
+      const handleDeleteTrip = (id) => {
+        setConfirmAction({
+          title: "Hapus Rencana Perjalanan?",
+          message: "Data rencana perjalanan ini akan dihapus permanen.",
+          onConfirm: async () => {
+            const { error } = await supabase.from('trips').delete().eq('id', id);
+            if (!error) {
+              setTrips(trips.filter(t => t.id !== id));
+              showToast("Rencana perjalanan telah dihapus.");
+            } else {
+              showToast("Gagal menghapus rencana.", "error");
             }
           }
         });
@@ -1321,6 +1373,7 @@
                 <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
                 <button onClick={() => setActiveTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
                 <button onClick={() => setActiveTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara</button>
+                <button onClick={() => setActiveTab('trips')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'trips' ? 'text-cyan-600 border-cyan-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-plane-departure mr-1.5"></i> Perjalanan</button>
                 <button onClick={() => setActiveTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
                 <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
                 <button onClick={() => setActiveTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
@@ -1593,7 +1646,105 @@
               </div>
             )}
 
-            {/* --- TAB: PATUNGAN (SPLIT BILL) FITUR BARU --- */}
+            {/* --- TAB: TRIP PLANNER (FITUR BARU) --- */}
+            {activeTab === 'trips' && (
+              <div className="animate-fade-in space-y-8">
+                <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
+                   <div className="relative z-10">
+                     <h2 className="text-3xl font-black mb-2">Perencana Perjalanan (Trip Planner)</h2>
+                     <p className="text-cyan-100">Susun rencana liburan impian Anda, tentukan budget, dan ubah langsung jadi target tabungan.</p>
+                   </div>
+                   <i className="fa-solid fa-plane-departure text-9xl absolute -right-4 -bottom-4 text-white/10"></i>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Create Trip Form */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
+                      <h3 className="font-bold mb-6 text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                        <i className="fa-solid fa-map-location-dot text-cyan-600 dark:text-cyan-400"></i> Rencanakan Liburan
+                      </h3>
+                      <form onSubmit={handleCreateTrip} className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Nama Perjalanan</label>
+                          <input type="text" value={newTripName} onChange={e => setNewTripName(e.target.value)} placeholder="Cth: Liburan Akhir Tahun" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Destinasi</label>
+                          <input type="text" value={newTripDest} onChange={e => setNewTripDest(e.target.value)} placeholder="Cth: Bali / Tokyo" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Budget Estimasi (Rp)</label>
+                          <input type="text" inputMode="numeric" value={newTripBudget} onChange={e => setNewTripBudget(formatInputNumber(e.target.value))} placeholder="Contoh: 10.000.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Tanggal Keberangkatan</label>
+                          <input type="date" value={newTripDate} onChange={e => setNewTripDate(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full bg-cyan-600 py-3 text-white font-bold rounded-xl hover:bg-cyan-700 shadow-lg shadow-cyan-100 dark:shadow-none transition-all mt-2">
+                          Simpan Rencana
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Trips List */}
+                  <div className="lg:col-span-2 space-y-6">
+                    {trips.length === 0 ? (
+                      <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                        <i className="fa-solid fa-suitcase-rolling text-4xl text-slate-300 dark:text-slate-600 mb-4"></i>
+                        <p className="text-slate-500 dark:text-slate-400 font-medium">Belum ada rencana perjalanan.</p>
+                      </div>
+                    ) : trips.map(trip => {
+                      const budget = parseFloat(trip.budget_limit) || 0;
+                      
+                      return (
+                        <div key={trip.id} className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 group flex flex-col md:flex-row gap-6 items-center">
+                          <div className="w-full md:w-1/3 text-center md:text-left border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-700 pb-4 md:pb-0 md:pr-6 relative">
+                              <button onClick={() => handleDeleteTrip(trip.id)} className="absolute top-0 right-0 md:hidden text-slate-400 hover:text-rose-500"><i className="fa-solid fa-trash-can"></i></button>
+                              <div className="w-16 h-16 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 rounded-2xl flex items-center justify-center mx-auto md:mx-0 mb-4">
+                                <i className="fa-solid fa-map-location-dot text-2xl"></i>
+                              </div>
+                              <h4 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">{trip.trip_name}</h4>
+                              <p className="text-cyan-600 dark:text-cyan-400 font-medium mt-1"><i className="fa-solid fa-location-dot mr-1"></i> {trip.destination}</p>
+                          </div>
+                          <div className="w-full md:w-2/3 space-y-4">
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Tanggal Berangkat</p>
+                                <p className="font-semibold text-slate-700 dark:text-slate-200">{formatDate(trip.date)}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Budget Disiapkan</p>
+                                <p className={`font-black text-lg text-slate-900 dark:text-white ${privacyFilter}`}>{formatRupiah(budget)}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Actions */}
+                            <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                               <button onClick={() => {
+                                  setGoalTitle(`Trip: ${trip.destination}`);
+                                  setGoalTarget(formatInputNumber(budget.toString()));
+                                  setGoalDeadline(trip.date);
+                                  setActiveTab('savings');
+                                  showToast("Beralih ke form Tabungan. Data rencana sudah disalin!", "info");
+                               }} className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-colors">
+                                  <i className="fa-solid fa-piggy-bank mr-1"></i> Jadikan Target Tabungan
+                               </button>
+                               <button onClick={() => handleDeleteTrip(trip.id)} className="px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-rose-500 rounded-xl transition-colors hidden md:block">
+                                  <i className="fa-solid fa-trash-can"></i>
+                               </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* --- TAB: PATUNGAN (SPLIT BILL) --- */}
             {activeTab === 'splitbill' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
