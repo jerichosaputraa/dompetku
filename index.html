@@ -211,6 +211,8 @@
       const [newTripBudget, setNewTripBudget] = useState('');
       const [newTripDest, setNewTripDest] = useState('');
       const [newTripDate, setNewTripDate] = useState('');
+      const [isScouting, setIsScouting] = useState(false); // AI State
+      const [aiTripNotes, setAiTripNotes] = useState(''); // AI Notes
 
       // --- STATE KALKULATOR PATUNGAN (SPLIT BILL) ---
       const [splitGrandTotal, setSplitGrandTotal] = useState('');
@@ -483,6 +485,79 @@
             }
           }
         });
+      };
+
+      // --- LOGIKA AI TRIP SCOUT (RISET HARGA) ---
+      const handleAIRisetharga = async () => {
+        if (!newTripDest) {
+          showToast("Masukkan destinasi terlebih dahulu!", "error");
+          return;
+        }
+        setIsScouting(true);
+        setAiTripNotes('');
+        showToast("AI sedang meriset harga di internet...", "info");
+
+        try {
+          const apiKey = ""; 
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+          const prompt = `Bertindaklah sebagai agen travel ahli. Berikan estimasi rata-rata biaya liburan ke ${newTripDest} per hari dalam mata uang Rupiah. Kembalikan HANYA format JSON valid tanpa markdown atau backtick, dengan struktur tepat seperti ini: { "hotel": integer, "transport": integer, "makan": integer, "notes": "catatan singkat 1-2 kalimat tentang harga di sana" }`;
+
+          const payload = {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: "OBJECT",
+                properties: {
+                  hotel: { type: "INTEGER" },
+                  transport: { type: "INTEGER" },
+                  makan: { type: "INTEGER" },
+                  notes: { type: "STRING" }
+                }
+              }
+            }
+          };
+
+          const fetchWithRetry = async (retries = 5, delay = 1000) => {
+            try {
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+              return await res.json();
+            } catch (error) {
+              if (retries > 0) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchWithRetry(retries - 1, delay * 2);
+              }
+              throw error;
+            }
+          };
+
+          const data = await fetchWithRetry();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (text) {
+            const result = JSON.parse(text);
+            const totalPerHari = (result.hotel || 0) + (result.transport || 0) + (result.makan || 0);
+            // Asumsi liburan 3 hari sebagai rekomendasi dasar
+            const rekomendasiTotal = totalPerHari * 3;
+            
+            setNewTripBudget(formatInputNumber(rekomendasiTotal.toString()));
+            setAiTripNotes(result.notes || "Harga berhasil diestimasi berdasarkan standar lokal rata-rata.");
+            showToast(`Riset selesai! Estimasi: Rp ${formatRupiah(rekomendasiTotal)} (Asumsi 3 Hari)`);
+          } else {
+            throw new Error("Gagal mendapat respon AI.");
+          }
+        } catch (error) {
+          console.error(error);
+          showToast("Gagal melakukan riset harga.", "error");
+        } finally {
+          setIsScouting(false);
+        }
       };
 
       // --- LOGIKA SPLIT BILL (KALKULATOR PATUNGAN) ---
@@ -1671,8 +1746,19 @@
                         </div>
                         <div>
                           <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Destinasi</label>
-                          <input type="text" value={newTripDest} onChange={e => setNewTripDest(e.target.value)} placeholder="Cth: Bali / Tokyo" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                          <div className="flex gap-2">
+                            <input type="text" value={newTripDest} onChange={e => setNewTripDest(e.target.value)} placeholder="Cth: Bali / Tokyo" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+                            <button type="button" onClick={handleAIRisetharga} disabled={isScouting} className="px-4 py-2.5 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-200 dark:hover:bg-cyan-900/60 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex items-center gap-2">
+                               {isScouting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
+                               AI Riset
+                            </button>
+                          </div>
                         </div>
+                        {aiTripNotes && (
+                          <div className="bg-cyan-50 dark:bg-cyan-900/20 p-3 rounded-xl border border-cyan-100 dark:border-cyan-800">
+                            <p className="text-xs text-cyan-700 dark:text-cyan-300"><i className="fa-solid fa-robot mr-1.5"></i> <strong>Rekomendasi AI:</strong> {aiTripNotes}</p>
+                          </div>
+                        )}
                         <div>
                           <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Budget Estimasi (Rp)</label>
                           <input type="text" inputMode="numeric" value={newTripBudget} onChange={e => setNewTripBudget(formatInputNumber(e.target.value))} placeholder="Contoh: 10.000.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
