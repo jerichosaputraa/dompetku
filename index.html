@@ -991,8 +991,8 @@
           <html>
             <head>
               <title>Kuitansi ${invoiceNo}</title>
-              <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"><\/script>
-              <link rel="stylesheet" href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)">
+              <script src="https://cdn.tailwindcss.com"><\/script>
+              <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
               <style>
                 @media print {
                   body { background: white; color: black; }
@@ -1220,7 +1220,7 @@
       }
 
       return (
-        <div className="min-h-screen pb-12 transition-colors relative">
+        <div className="min-h-screen pb-24 md:pb-12 transition-colors relative">
           
           {/* Modal Toast & Confirm */}
           {toast && (
@@ -1368,7 +1368,7 @@
                 </div>
               </div>
               
-              <div className="flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
+              <div className="hidden md:flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
                 <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
                 <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
                 <button onClick={() => setActiveTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
@@ -1382,7 +1382,7 @@
             </div>
           </header>
 
-          <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+          <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
             
             {/* ===================== TAB BERANDA ===================== */}
             {activeTab === 'dashboard' && (
@@ -1646,7 +1646,7 @@
               </div>
             )}
 
-            {/* --- TAB: TRIP PLANNER (FITUR BARU) --- */}
+            {/* --- TAB: TRIP PLANNER --- */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
@@ -1759,7 +1759,7 @@
             {/* --- TAB: PATUNGAN (SPLIT BILL) --- */}
             {activeTab === 'splitbill' && (
               <div className="animate-fade-in space-y-8">
-                <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('[https://www.transparenttextures.com/patterns/cubes.png](https://www.transparenttextures.com/patterns/cubes.png)')] relative overflow-hidden">
+                <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                    <div className="relative z-10">
                      <h2 className="text-3xl font-black mb-2">Kalkulator Patungan (Split Bill)</h2>
                      <p className="text-fuchsia-100">Bagi tagihan proporsional secara otomatis dan adil ketika ada diskon voucher, pajak, atau ongkir.</p>
@@ -1835,198 +1835,6 @@
                     <button onClick={handleCopySplitBill} className="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3.5 px-4 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-fuchsia-200 dark:shadow-none">
                       <i className="fa-regular fa-copy"></i> Salin Teks ke WhatsApp
                     </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ===================== TAB TABUNGAN ===================== */}
-            {activeTab === 'savings' && (
-              <div className="animate-fade-in">
-                <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('[https://www.transparenttextures.com/patterns/cubes.png](https://www.transparenttextures.com/patterns/cubes.png)')] relative overflow-hidden">
-                  <div className="relative z-10">
-                    <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
-                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalSavingsCollected)}</h2>
-                    <p className="mt-4 text-emerald-100 text-sm">Uang ini tersimpan aman di luar Saldo Aktif Anda.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-1">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-bullseye text-emerald-500"></i> Buat Target Baru</h3>
-                      <form onSubmit={handleCreateGoal} className="space-y-5">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Impian/Target</label>
-                          <input type="text" value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: Liburan ke Jepang" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
-                          <input type="text" inputMode="numeric" value={goalTarget} onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 15.000.000" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
-                          <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" />
-                        </div>
-                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
-                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Buat Kantong Tabungan'}
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
-                    {savingsGoals.length === 0 ? (
-                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
-                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-piggy-bank text-slate-400 text-3xl"></i></div>
-                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada kantong tabungan</h4>
-                      </div>
-                    ) : (
-                      savingsGoals.map(goal => {
-                        const target = parseFloat(goal.target_amount) || 0;
-                        const current = parseFloat(goal.current_amount) || 0;
-                        const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
-                        const isCompleted = target > 0 && current >= target;
-
-                        return (
-                          <div key={goal.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
-                            <button onClick={() => handleDeleteGoal(goal.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-600'}`}><i className={`fa-solid ${isCompleted ? 'fa-trophy' : 'fa-piggy-bank'} text-xl`}></i></div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{goal.title}</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{goal.deadline ? `Target: ${formatDate(goal.deadline)}` : 'Tanpa batas waktu'}</p>
-                            <div className="mb-2 flex justify-between text-sm font-medium">
-                              <span className={`${isCompleted ? 'text-amber-500' : 'text-emerald-600'} ${privacyFilter}`}>{formatRupiah(current)}</span>
-                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
-                            </div>
-                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
-                            {isCompleted ? (
-                              <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
-                            ) : (
-                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
-                            )}
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ===================== TAB CICILAN & PAYLATER ===================== */}
-            {activeTab === 'installments' && (
-              <div className="animate-fade-in">
-                <div className="bg-violet-600 dark:bg-violet-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('[https://www.transparenttextures.com/patterns/cubes.png](https://www.transparenttextures.com/patterns/cubes.png)')] relative overflow-hidden">
-                  <div className="relative z-10">
-                    <p className="text-violet-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Hutang Aktif</p>
-                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalActiveDebt)}</h2>
-                    <p className="mt-4 text-violet-100 text-sm">Pantau dan kelola beban tagihan bulanan Anda di sini.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Form Tambah Cicilan */}
-                  <div className="lg:col-span-1">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-file-signature text-violet-500"></i> Catat Cicilan Baru</h3>
-                      <form onSubmit={handleCreateInstallment} className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Barang / Tagihan</label>
-                          <input type="text" value={instName} onChange={(e) => setInstName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: Shopee Paylater iPhone" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Total Hutang (Rp)</label>
-                          <input type="text" inputMode="numeric" value={instTotalAmount} onChange={(e) => setInstTotalAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Termasuk biaya admin/bunga" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tenor (Bulan)</label>
-                          <input type="number" value={instTenor} onChange={(e) => setInstTenor(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: 12" />
-                        </div>
-                        
-                        {/* Auto Rekomendasi Cicilan */}
-                        {instTotalAmount && instTenor && parseInt(instTenor) > 0 && (
-                          <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl border border-violet-100 dark:border-violet-800">
-                            <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Estimasi Cicilan per Bulan:</p>
-                            <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.toString().replace(/\./g, '')) / parseInt(instTenor)))}</p>
-                          </div>
-                        )}
-
-                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
-                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Data Cicilan'}
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-
-                  {/* List Cicilan */}
-                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
-                    {installments.length === 0 ? (
-                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
-                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-credit-card text-slate-400 text-3xl"></i></div>
-                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Tidak Ada Beban Hutang</h4>
-                        <p className="text-slate-500 text-sm">Hebat! Pertahankan kondisi finansial sehat ini.</p>
-                      </div>
-                    ) : (
-                      installments.map(inst => {
-                        const total = parseFloat(inst.total_amount) || 0;
-                        const paid = parseFloat(inst.paid_amount) || 0;
-                        const progress = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
-                        const isCompleted = total > 0 && paid >= total;
-                        
-                        const tenor = parseInt(inst.tenor_months) || 1;
-                        const monthlyRec = Math.ceil(total / tenor);
-                        // Estimasi bulan ke berapa yang sudah dibayar
-                        const monthsPaid = monthlyRec > 0 ? Math.min(Math.floor(paid / monthlyRec), tenor) : 0;
-                        
-                        return (
-                          <div key={inst.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
-                            <button onClick={() => handleDeleteInstallment(inst.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
-                            
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-violet-100 text-violet-600'}`}>
-                              <i className={`fa-solid ${isCompleted ? 'fa-check-double' : 'fa-credit-card'} text-xl`}></i>
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{inst.item_name}</h3>
-                            
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                              {isCompleted ? 'Hutang Lunas!' : `Cicilan ${monthsPaid} dari ${inst.tenor_months} bln`}
-                            </p>
-                            
-                            <div className="mb-2 flex justify-between text-sm font-medium">
-                              <span className={`${isCompleted ? 'text-emerald-600' : 'text-violet-600'} ${privacyFilter}`}>{formatRupiah(paid)}</span>
-                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(total)}</span>
-                            </div>
-                            
-                            {/* Progress Bar */}
-                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
-                              <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-violet-500'}`} style={{ width: `${progress}%` }}></div>
-                            </div>
-                            
-                            {isCompleted ? (
-                              <div className="w-full py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm text-center">
-                                <i className="fa-solid fa-check-circle mr-1.5"></i> Pembayaran Selesai
-                              </div>
-                            ) : (
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={() => {
-                                    setInstPayModal({
-                                      isOpen: true, 
-                                      instId: inst.id, 
-                                      instName: inst.item_name, 
-                                      amount: formatInputNumber(monthlyRec.toString()),
-                                      wallet: wallets[0]
-                                    });
-                                  }} 
-                                  className="flex-1 py-2.5 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-                                >
-                                  <i className="fa-solid fa-money-bill-wave"></i> Bayar
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })
-                    )}
                   </div>
                 </div>
               </div>
@@ -2260,12 +2068,16 @@
 
                         {/* Stempel Sukses/LUNAS Skewed */}
                         <div className="flex items-center gap-4 text-center relative select-none">
-                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
-                            LUNAS
+                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-600/90 uppercase font-black tracking-widest text-lg px-4 py-1.5 rounded-xl rotate-[-12deg] select-none bg-white/40 backdrop-blur-xs">
+                            <i className="fa-solid fa-circle-check mr-1.5"></i> LUNAS
+                          </div>
+                          <div className="w-24">
+                            <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Metode Dana</span>
+                            <span className="font-bold text-slate-700 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{invoiceWallet}</span>
                           </div>
                           <div className="w-24">
                             <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
-                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{user?.user_metadata?.name || 'Staff'}</span>
+                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{currentUserName}</span>
                           </div>
                         </div>
 
@@ -2401,7 +2213,70 @@
               </div>
             )}
 
+            {/* ===================== TAB MENU LAINNYA (MOBILE ONLY) ===================== */}
+            {activeTab === 'more' && (
+              <div className="animate-fade-in space-y-8 md:hidden">
+                <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+                   <div className="relative z-10">
+                     <h2 className="text-3xl font-black mb-2">Menu Lainnya</h2>
+                     <p className="text-slate-300 text-sm">Jelajahi seluruh fitur FinansialKu</p>
+                   </div>
+                   <i className="fa-solid fa-shapes text-8xl absolute -right-4 -bottom-4 text-white/5"></i>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <button onClick={() => setActiveTab('installments')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                    <div className="w-14 h-14 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-credit-card"></i></div>
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Cicilan</span>
+                  </button>
+                  <button onClick={() => setActiveTab('events')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                    <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-calendar-star"></i></div>
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Acara Khusus</span>
+                  </button>
+                  <button onClick={() => setActiveTab('insights')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                    <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-lightbulb"></i></div>
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Laporan Pintar</span>
+                  </button>
+                  <button onClick={() => setActiveTab('invoice')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                    <div className="w-14 h-14 bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-file-invoice-dollar"></i></div>
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Kuitansi</span>
+                  </button>
+                  <button onClick={() => setActiveTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
+                    <div className="w-14 h-14 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-gear"></i></div>
+                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Pengaturan</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
           </main>
+
+          {/* MOBILE BOTTOM NAVIGATION */}
+          {isLoggedIn && (
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-2 z-50 pb-safe">
+              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <i className="fa-solid fa-house text-xl mb-1"></i>
+                <span className="text-[10px] font-bold">Beranda</span>
+              </button>
+              <button onClick={() => setActiveTab('savings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <i className="fa-solid fa-piggy-bank text-xl mb-1"></i>
+                <span className="text-[10px] font-bold">Tabungan</span>
+              </button>
+              <button onClick={() => setActiveTab('trips')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'trips' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <i className="fa-solid fa-plane-departure text-xl mb-1"></i>
+                <span className="text-[10px] font-bold">Trip</span>
+              </button>
+              <button onClick={() => setActiveTab('splitbill')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'splitbill' ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <i className="fa-solid fa-users-viewfinder text-xl mb-1"></i>
+                <span className="text-[10px] font-bold">Split</span>
+              </button>
+              <button onClick={() => setActiveTab('more')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'more' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <i className="fa-solid fa-grip text-xl mb-1"></i>
+                <span className="text-[10px] font-bold">Lainnya</span>
+              </button>
+            </nav>
+          )}
+
         </div>
       );
     }
@@ -2418,6 +2293,7 @@
     html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
     .snap-x { scroll-snap-type: x mandatory; }
     .snap-start { scroll-snap-align: start; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
