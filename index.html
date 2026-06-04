@@ -31,9 +31,8 @@
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjb2VscmdveXdxbWRpd3Fhc2J6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMzQzODcsImV4cCI6MjA5NTYxMDM4N30.KL0brutSStLZHV80cOnEZ43DiC8_es25no8SlDkZTIA';
     
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const isSupabaseConfigured = true;
 
-    // --- PROTEKSI ANTI-CRASH UNTUK FORMATTING ---
+    // --- HELPER FUNCTIONS ---
     const formatRupiah = (number) => {
       const parsed = parseFloat(number);
       if (isNaN(parsed)) return 'Rp 0';
@@ -149,6 +148,7 @@
       );
     }
 
+    // --- KOMPONEN UTAMA APP ---
     function App() {
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [authMode, setAuthMode] = useState('login'); 
@@ -158,11 +158,38 @@
       const [user, setUser] = useState(null);
       const [isLoading, setIsLoading] = useState(false);
 
-      const [activeTab, setActiveTab] = useState('dashboard');
+      // --- LOGIKA HARDWARE BACK BUTTON (ANTI-CLOSE) ---
+      const [activeTab, setActiveTab] = useState(() => {
+        const hash = window.location.hash.replace('#', '');
+        const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'invoice', 'settings', 'more'];
+        return validTabs.includes(hash) ? hash : 'dashboard';
+      });
+
+      useEffect(() => {
+        if (!window.history.state || !window.history.state.tab) {
+          window.history.replaceState({ tab: activeTab }, '', `#${activeTab}`);
+        }
+        const handlePopState = (event) => {
+          if (event.state && event.state.tab) {
+            setActiveTab(event.state.tab);
+          } else {
+            const hash = window.location.hash.replace('#', '');
+            setActiveTab(hash || 'dashboard');
+          }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+      }, []);
+
+      const changeTab = (tabName) => {
+        if (tabName !== activeTab) {
+          window.history.pushState({ tab: tabName }, '', `#${tabName}`);
+          setActiveTab(tabName);
+        }
+      };
+
       const [toast, setToast] = useState(null);
       const [confirmAction, setConfirmAction] = useState(null);
-
-      // --- STATE PRIVACY BLUR ---
       const [isPrivacyMode, setIsPrivacyMode] = useState(() => localStorage.getItem('privacyMode') === 'true');
 
       // State Transaksi
@@ -192,40 +219,35 @@
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
       const [topUpAmount, setTopUpAmount] = useState('');
 
-      // --- STATE CICILAN & PAYLATER ---
+      // Cicilan State
       const [installments, setInstallments] = useState([]);
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
       const [instTenor, setInstTenor] = useState('');
       const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
 
-      // --- STATE ACARA KHUSUS (EVENT BUDGET TRACKER) ---
+      // Acara Khusus
       const [events, setEvents] = useState([]);
       const [newEventName, setNewEventName] = useState('');
       const [newEventBudget, setNewEventBudget] = useState('');
       const [selectedEventId, setSelectedEventId] = useState('');
 
-      // --- STATE TRIP PLANNER (PERENCANA PERJALANAN) ---
+      // Trip Planner
       const [trips, setTrips] = useState([]);
       const [newTripName, setNewTripName] = useState('');
       const [newTripBudget, setNewTripBudget] = useState('');
       const [newTripDest, setNewTripDest] = useState('');
       const [newTripDate, setNewTripDate] = useState('');
 
-      // --- STATE KALKULATOR PATUNGAN (SPLIT BILL) ---
+      // Split Bill
       const [splitGrandTotal, setSplitGrandTotal] = useState('');
-      const [splitPersons, setSplitPersons] = useState([
-        { id: 1, name: 'Saya', amount: '' },
-        { id: 2, name: 'Teman 1', amount: '' }
-      ]);
+      const [splitPersons, setSplitPersons] = useState([{ id: 1, name: 'Saya', amount: '' }, { id: 2, name: 'Teman 1', amount: '' }]);
 
-      // Settings State
+      // Settings & Invoice
       const [profileName, setProfileName] = useState('');
       const [newCategoryName, setNewCategoryName] = useState('');
       const [newCategoryType, setNewCategoryType] = useState('expense');
       const [newWalletName, setNewWalletName] = useState('');
-
-      // --- STATE KHUSUS KUITANSI GENERATOR ---
       const [invoiceNo, setInvoiceNo] = useState('');
       const [invoiceType, setInvoiceType] = useState('expense'); 
       const [invoiceParty, setInvoiceParty] = useState(''); 
@@ -235,16 +257,12 @@
       const [invoiceWallet, setInvoiceWallet] = useState(defaultWallets[0]);
       const [invoiceNote, setInvoiceNote] = useState('Kuitansi ini sah dihasilkan secara digital melalui sistem FinansialKu.');
 
-      // --- STATE KHUSUS OCR AI ---
+      // OTHERS
       const [isScanning, setIsScanning] = useState(false);
       const fileInputRef = useRef(null);
-
-      // --- STATE KHUSUS INCOME SPLITTER ---
       const [incomeSplitter, setIncomeSplitter] = useState({ isOpen: false, amount: 0 });
-
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
 
-      // Kelas CSS untuk memburamkan layar
       const privacyFilter = isPrivacyMode ? "blur-[6px] select-none opacity-70 pointer-events-none transition-all duration-300" : "transition-all duration-300";
 
       const showToast = (message, type = 'success') => {
@@ -252,9 +270,7 @@
         setTimeout(() => setToast(null), 3000);
       };
 
-      useEffect(() => {
-        localStorage.setItem('privacyMode', isPrivacyMode);
-      }, [isPrivacyMode]);
+      useEffect(() => { localStorage.setItem('privacyMode', isPrivacyMode); }, [isPrivacyMode]);
 
       useEffect(() => {
         if (!invoiceNo) {
@@ -292,11 +308,9 @@
           const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
           if (instRes.data) setInstallments(instRes.data || []); 
 
-          // Fetch Events
           const evRes = await supabase.from('events').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
           if (evRes.data) setEvents(evRes.data || []);
 
-          // Fetch Trips
           const trRes = await supabase.from('trips').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
           if (trRes.data) setTrips(trRes.data || []);
           
@@ -444,7 +458,7 @@
         });
       };
 
-      // --- LOGIKA TRIP PLANNER (PERENCANA PERJALANAN) ---
+      // --- LOGIKA TRIP PLANNER ---
       const handleCreateTrip = async (e) => {
         e.preventDefault();
         const budget = parseFloat(newTripBudget.toString().replace(/\./g, ''));
@@ -485,7 +499,7 @@
         });
       };
 
-      // --- LOGIKA SPLIT BILL (KALKULATOR PATUNGAN) ---
+      // --- LOGIKA SPLIT BILL ---
       const handleAddPerson = () => {
         setSplitPersons([...splitPersons, { id: Date.now(), name: `Teman ${splitPersons.length + 1}`, amount: '' }]);
       };
@@ -513,17 +527,11 @@
       const splitResults = useMemo(() => {
         const sumPesanan = splitTotals.sumPesanan;
         const grandTotal = splitTotals.grandTotal;
-        
         if (sumPesanan === 0) return splitPersons.map(p => ({ ...p, totalToPay: 0 }));
-        
         return splitPersons.map(p => {
            const pAmt = parseFloat(p.amount.toString().replace(/\./g, '')) || 0;
-           // Proporsikan total akhir berdasarkan pesanan masing-masing (bisa diskon atau pajak/ongkir)
            const totalToPay = (pAmt / sumPesanan) * grandTotal;
-           return {
-              ...p,
-              totalToPay
-           };
+           return { ...p, totalToPay };
         });
       }, [splitTotals, splitPersons]);
 
@@ -551,6 +559,7 @@
          document.body.removeChild(textArea);
       };
 
+      // --- LOGIKA CICILAN ---
       const handleCreateInstallment = async (e) => {
         e.preventDefault();
         const numericTotal = parseFloat(instTotalAmount.toString().replace(/\./g, ''));
@@ -615,6 +624,7 @@
         setIsLoading(false);
       };
 
+      // --- LOGIKA INSIGHTS & EMERGENCY FUND ---
       const insights = useMemo(() => {
         if (filteredTransactions.length === 0) return null;
 
@@ -696,12 +706,10 @@
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
-      // --- LOGIKA EKSPOR KALENDER (.ICS) ---
       const handleExportCalendar = () => {
         let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//FinansialKu//ID\nCALSCALE:GREGORIAN\n";
         let hasEvents = false;
 
-        // 1. Ekspor Tenggat Tabungan
         savingsGoals.forEach(goal => {
           if (goal.deadline && parseFloat(goal.current_amount || 0) < parseFloat(goal.target_amount || 0)) {
             const d = new Date(goal.deadline);
@@ -718,14 +726,13 @@
           }
         });
 
-        // 2. Ekspor Reminder Cicilan (Dibuat otomatis tanggal 1 bulan depan)
         installments.forEach(inst => {
           const total = parseFloat(inst.total_amount) || 0;
           const paid = parseFloat(inst.paid_amount) || 0;
           if (paid < total) {
             const d = new Date();
             d.setMonth(d.getMonth() + 1);
-            d.setDate(1); // Set sebagai pengingat di tanggal 1 bulan depan
+            d.setDate(1);
             const dateStr = d.toISOString().replace(/[-:]/g, '').substring(0, 8);
             
             icsContent += "BEGIN:VEVENT\n";
@@ -761,7 +768,6 @@
         if (!numericAmount || !description || !category || !date || !selectedWallet) return;
         
         setIsLoading(true);
-        // Menambahkan `event_id` ke dalam payload transaksi
         const newTx = { 
             type, 
             amount: numericAmount, 
@@ -977,7 +983,7 @@
         setInvoiceDate(t.date);
         setInvoiceWallet(t.wallet || 'Dompet Utama');
         setInvoiceParty(t.type === 'income' ? 'Diterima Dari: Pengirim Dana' : 'Dibayarkan Kepada: Penerima Dana');
-        setActiveTab('invoice');
+        changeTab('invoice');
         showToast("Data transaksi berhasil dimuat ke kuitansi!");
       };
 
@@ -1003,10 +1009,8 @@
             <body class="bg-white text-slate-800 p-8 flex justify-center items-center min-h-screen">
               <div class="max-w-4xl w-full border-4 border-double border-slate-400 p-8 rounded-3xl relative bg-white">
                 
-                <!-- Torn strip border effect -->
                 <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-slate-200 to-transparent"></div>
 
-                <!-- Receipt Header -->
                 <div class="flex justify-between items-start border-b-2 border-slate-200 pb-6 mb-6">
                   <div>
                     <h1 class="text-3xl font-extrabold tracking-tight text-indigo-700 uppercase flex items-center gap-2">
@@ -1020,7 +1024,6 @@
                   </div>
                 </div>
 
-                <!-- Receipt Grid -->
                 <div class="space-y-4 text-sm">
                   <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
                     <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Tanggal</span>
@@ -1047,45 +1050,32 @@
                   </div>
                 </div>
 
-                <!-- Stamp & Total Section -->
                 <div class="flex flex-col sm:flex-row justify-between items-center mt-10 pt-6 border-t-2 border-slate-200 gap-6">
                   
-                  <!-- Total Container -->
                   <div class="bg-indigo-50 border-2 border-indigo-200 px-6 py-4 rounded-2xl flex items-center gap-3 shrink-0">
                     <span class="text-xs font-bold text-indigo-700 uppercase tracking-wider">Jumlah</span>
                     <span class="text-2xl font-extrabold text-indigo-900">${formatRupiah(rawAmount)}</span>
                   </div>
 
-                  <!-- Stamp & Signatures -->
                   <div class="flex items-center gap-12 text-center relative">
                     
-                    <!-- Skewed LUNAS stamp -->
                     <div class="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-600/90 uppercase font-black tracking-widest text-lg px-4 py-1.5 rounded-xl rotate-[-12deg] select-none bg-white/40 backdrop-blur-xs">
                       <i class="fa-solid fa-circle-check mr-1.5"></i> LUNAS
                     </div>
-
                     <div class="w-36">
-                      <p class="text-xs text-slate-400 uppercase tracking-widest mb-10">Metode Dana</p>
-                      <p class="font-bold text-slate-700 text-sm border-b border-slate-300 pb-1">${invoiceWallet}</p>
+                      <span class="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Metode Dana</span>
+                      <span class="font-bold text-slate-700 text-[10px] border-b border-slate-300 pb-0.5 block truncate">${invoiceWallet}</span>
                     </div>
-
                     <div class="w-36">
-                      <p class="text-xs text-slate-400 uppercase tracking-widest mb-10">Penanggung Jawab</p>
-                      <p class="font-bold text-slate-900 text-sm border-b border-slate-300 pb-1">${currentUserName}</p>
+                      <span class="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
+                      <span class="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">${currentUserName}</span>
                     </div>
-
                   </div>
-                </div>
 
-                <!-- Additional Note -->
-                <div class="mt-8 pt-4 border-t border-slate-100 flex justify-between items-center text-slate-400 text-xs">
-                  <p>${invoiceNote}</p>
-                  <p class="font-mono text-[10px] tracking-tight text-slate-300">Generated on FinansialKu App</p>
                 </div>
 
               </div>
 
-              <!-- Float Print Button (Inside New Tab Only) -->
               <div class="fixed bottom-6 right-6 no-print">
                 <button onclick="window.print();" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-2xl flex items-center gap-2 transition-all">
                   <i class="fa-solid fa-print"></i> Cetak Sekarang
@@ -1111,7 +1101,7 @@
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = ""; // Kunci API disediakan otomatis oleh lingkungan eksekusi
+            const apiKey = ""; 
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             const payload = {
@@ -1229,6 +1219,7 @@
               <p className="font-medium text-sm">{toast.message}</p>
             </div>
           )}
+          
           {confirmAction && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl animate-fade-in-up text-center">
@@ -1256,7 +1247,6 @@
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pemasukan <strong>{formatRupiah(incomeSplitter.amount)}</strong>. Terapkan rasio 50/30/20 untuk finansial yang lebih sehat.</p>
                 
                 <div className="space-y-4 mb-8">
-                  {/* 50% Needs */}
                   <div className="bg-sky-50 dark:bg-sky-900/20 p-4 rounded-2xl border border-sky-100 dark:border-sky-800/50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-sky-100 dark:bg-sky-800 text-sky-600 dark:text-sky-300 rounded-xl flex items-center justify-center"><i className="fa-solid fa-house"></i></div>
@@ -1267,7 +1257,6 @@
                     </div>
                     <p className={`font-bold text-sky-600 dark:text-sky-400 ${privacyFilter}`}>{formatRupiah(incomeSplitter.amount * 0.5)}</p>
                   </div>
-                  {/* 30% Wants */}
                   <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-2xl border border-purple-100 dark:border-purple-800/50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-purple-100 dark:bg-purple-800 text-purple-600 dark:text-purple-300 rounded-xl flex items-center justify-center"><i className="fa-solid fa-gamepad"></i></div>
@@ -1278,7 +1267,6 @@
                     </div>
                     <p className={`font-bold text-purple-600 dark:text-purple-400 ${privacyFilter}`}>{formatRupiah(incomeSplitter.amount * 0.3)}</p>
                   </div>
-                  {/* 20% Savings */}
                   <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-300 rounded-xl flex items-center justify-center"><i className="fa-solid fa-piggy-bank"></i></div>
@@ -1344,7 +1332,7 @@
             </div>
           )}
 
-          {/* Header & Tab Menu */}
+          {/* Header Desktop Navigation */}
           <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors shadow-sm">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="h-16 flex items-center justify-between">
@@ -1353,12 +1341,9 @@
                   <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">FinansialKu</h1>
                 </div>
                 <div className="flex items-center gap-3">
-                  
-                  {/* Tombol Privacy Blur */}
                   <button onClick={() => setIsPrivacyMode(!isPrivacyMode)} className={`p-2 rounded-lg transition-colors ${isPrivacyMode ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Penyamaran Saldo">
                     <i className={`fa-solid ${isPrivacyMode ? 'fa-eye-slash' : 'fa-eye'} text-lg`}></i>
                   </button>
-
                   <div className="hidden sm:block text-sm font-medium text-slate-500 dark:text-slate-400">
                     Halo, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.user_metadata?.name || user?.email?.split('@')[0]}</span>
                   </div>
@@ -1369,15 +1354,15 @@
               </div>
               
               <div className="hidden md:flex gap-6 mt-1 border-b-2 border-transparent overflow-x-auto custom-scrollbar">
-                <button onClick={() => setActiveTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
-                <button onClick={() => setActiveTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
-                <button onClick={() => setActiveTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
-                <button onClick={() => setActiveTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara</button>
-                <button onClick={() => setActiveTab('trips')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'trips' ? 'text-cyan-600 border-cyan-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-plane-departure mr-1.5"></i> Perjalanan</button>
-                <button onClick={() => setActiveTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
-                <button onClick={() => setActiveTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
-                <button onClick={() => setActiveTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
-                <button onClick={() => setActiveTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
+                <button onClick={() => changeTab('dashboard')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-house mr-1.5"></i> Beranda</button>
+                <button onClick={() => changeTab('savings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'savings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-piggy-bank mr-1.5"></i> Tabungan</button>
+                <button onClick={() => changeTab('installments')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'installments' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-credit-card mr-1.5"></i> Cicilan</button>
+                <button onClick={() => changeTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara</button>
+                <button onClick={() => changeTab('trips')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'trips' ? 'text-cyan-600 border-cyan-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-plane-departure mr-1.5"></i> Perjalanan</button>
+                <button onClick={() => changeTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
+                <button onClick={() => changeTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
+                <button onClick={() => changeTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
+                <button onClick={() => changeTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
               </div>
             </div>
           </header>
@@ -1387,8 +1372,6 @@
             {/* ===================== TAB BERANDA ===================== */}
             {activeTab === 'dashboard' && (
               <div className="animate-fade-in">
-                
-                {/* Carousel Multi-Dompet */}
                 <div className="mb-8">
                   <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 ml-1">Saldo per Dompet</h3>
                   <div className="flex gap-4 overflow-x-auto custom-scrollbar pb-4 snap-x">
@@ -1428,10 +1411,8 @@
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Form Tambah Transaksi */}
                   <div className="lg:col-span-1">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
-                      
                       <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <i className="fa-solid fa-plus text-indigo-600 dark:text-indigo-400"></i> Catat Transaksi
@@ -1482,15 +1463,12 @@
                             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
                           </div>
                         </div>
-
-                        {/* INPUT ACARA KHUSUS */}
                         <div>
                           <select value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)} className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
                             <option value="">Hubungkan ke Acara (Opsional)</option>
                             {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name}</option>)}
                           </select>
                         </div>
-
                         <button type="submit" disabled={isLoading || isScanning} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors">
                           {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Transaksi'}
                         </button>
@@ -1498,7 +1476,6 @@
                     </div>
                   </div>
 
-                  {/* List Riwayat Transaksi */}
                   <div className="lg:col-span-2">
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Riwayat Transaksi <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-full ml-2">{filteredTransactions.length} Data</span></h3>
@@ -1541,8 +1518,16 @@
                               <div className="flex items-center gap-4 mt-3 sm:mt-0 pl-16 sm:pl-0 shrink-0">
                                 <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'} ${privacyFilter}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
                                 <div className="flex gap-1">
-                                  {/* Tombol Cepat Menuju Kuitansi */}
-                                  <button onClick={() => handleLoadToInvoice(t)} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
+                                  <button onClick={() => {
+                                      setInvoiceType(t.type);
+                                      setInvoiceAmount(formatInputNumber(t.amount.toString()));
+                                      setInvoiceDesc(t.description);
+                                      setInvoiceDate(t.date);
+                                      setInvoiceWallet(t.wallet || 'Dompet Utama');
+                                      setInvoiceParty(t.type === 'income' ? 'Diterima Dari: Pengirim Dana' : 'Dibayarkan Kepada: Penerima Dana');
+                                      changeTab('invoice');
+                                      showToast("Data transaksi berhasil dimuat ke kuitansi!");
+                                  }} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
                                   <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus"><i className="fa-solid fa-trash"></i></button>
                                 </div>
                               </div>
@@ -1556,7 +1541,185 @@
               </div>
             )}
 
-            {/* --- TAB: ACARA KHUSUS --- */}
+            {/* ===================== TAB TABUNGAN ===================== */}
+            {activeTab === 'savings' && (
+              <div className="animate-fade-in">
+                <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                  <div className="relative z-10">
+                    <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
+                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalSavingsCollected)}</h2>
+                    <p className="mt-4 text-emerald-100 text-sm">Uang ini tersimpan aman di luar Saldo Aktif Anda.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-bullseye text-emerald-500"></i> Buat Target Baru</h3>
+                      <form onSubmit={handleCreateGoal} className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Impian/Target</label>
+                          <input type="text" value={goalTitle} onChange={(e) => setGoalTitle(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: Liburan ke Jepang" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
+                          <input type="text" inputMode="numeric" value={goalTarget} onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 15.000.000" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
+                          <input type="date" value={goalDeadline} onChange={(e) => setGoalDeadline(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Buat Kantong Tabungan'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {savingsGoals.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-piggy-bank text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Belum ada kantong tabungan</h4>
+                      </div>
+                    ) : (
+                      savingsGoals.map(goal => {
+                        const target = parseFloat(goal.target_amount) || 0;
+                        const current = parseFloat(goal.current_amount) || 0;
+                        const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+                        const isCompleted = target > 0 && current >= target;
+
+                        return (
+                          <div key={goal.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
+                            <button onClick={() => handleDeleteGoal(goal.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-600'}`}><i className={`fa-solid ${isCompleted ? 'fa-trophy' : 'fa-piggy-bank'} text-xl`}></i></div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{goal.title}</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{goal.deadline ? `Target: ${formatDate(goal.deadline)}` : 'Tanpa batas waktu'}</p>
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={`${isCompleted ? 'text-amber-500' : 'text-emerald-600'} ${privacyFilter}`}>{formatRupiah(current)}</span>
+                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
+                            </div>
+                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
+                            {isCompleted ? (
+                              <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
+                            ) : (
+                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================== TAB CICILAN & PAYLATER ===================== */}
+            {activeTab === 'installments' && (
+              <div className="animate-fade-in">
+                <div className="bg-violet-600 dark:bg-violet-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
+                  <div className="relative z-10">
+                    <p className="text-violet-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Hutang Aktif</p>
+                    <h2 className={`text-4xl sm:text-5xl font-bold tracking-tight ${privacyFilter}`}>{formatRupiah(totalActiveDebt)}</h2>
+                    <p className="mt-4 text-violet-100 text-sm">Pantau dan kelola beban tagihan bulanan Anda di sini.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-1">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-28">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-file-signature text-violet-500"></i> Catat Cicilan Baru</h3>
+                      <form onSubmit={handleCreateInstallment} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Barang / Tagihan</label>
+                          <input type="text" value={instName} onChange={(e) => setInstName(e.target.value)} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: Shopee Paylater iPhone" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Total Hutang (Rp)</label>
+                          <input type="text" inputMode="numeric" value={instTotalAmount} onChange={(e) => setInstTotalAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Termasuk biaya admin/bunga" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tenor (Bulan)</label>
+                          <input type="number" value={instTenor} onChange={(e) => setInstTenor(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: 12" />
+                        </div>
+                        
+                        {instTotalAmount && instTenor && parseInt(instTenor) > 0 && (
+                          <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl border border-violet-100 dark:border-violet-800">
+                            <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Estimasi Cicilan per Bulan:</p>
+                            <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.toString().replace(/\./g, '')) / parseInt(instTenor)))}</p>
+                          </div>
+                        )}
+
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-violet-600 hover:bg-violet-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Data Cicilan'}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 items-start">
+                    {installments.length === 0 ? (
+                      <div className="sm:col-span-2 text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                        <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-credit-card text-slate-400 text-3xl"></i></div>
+                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">Tidak Ada Beban Hutang</h4>
+                        <p className="text-slate-500 text-sm">Hebat! Pertahankan kondisi finansial sehat ini.</p>
+                      </div>
+                    ) : (
+                      installments.map(inst => {
+                        const total = parseFloat(inst.total_amount) || 0;
+                        const paid = parseFloat(inst.paid_amount) || 0;
+                        const progress = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
+                        const isCompleted = total > 0 && paid >= total;
+                        const tenor = parseInt(inst.tenor_months) || 1;
+                        const monthlyRec = Math.ceil(total / tenor);
+                        const monthsPaid = monthlyRec > 0 ? Math.min(Math.floor(paid / monthlyRec), tenor) : 0;
+                        
+                        return (
+                          <div key={inst.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
+                            <button onClick={() => handleDeleteInstallment(inst.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fa-solid fa-trash"></i></button>
+                            
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-violet-100 text-violet-600'}`}>
+                              <i className={`fa-solid ${isCompleted ? 'fa-check-double' : 'fa-credit-card'} text-xl`}></i>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{inst.item_name}</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{isCompleted ? 'Hutang Lunas!' : `Cicilan ${monthsPaid} dari ${inst.tenor_months} bln`}</p>
+                            <div className="mb-2 flex justify-between text-sm font-medium">
+                              <span className={`${isCompleted ? 'text-emerald-600' : 'text-violet-600'} ${privacyFilter}`}>{formatRupiah(paid)}</span>
+                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(total)}</span>
+                            </div>
+                            <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
+                              <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-violet-500'}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+                            
+                            {isCompleted ? (
+                              <div className="w-full py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm text-center">
+                                <i className="fa-solid fa-check-circle mr-1.5"></i> Pembayaran Selesai
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => {
+                                    setInstPayModal({
+                                      isOpen: true, instId: inst.id, instName: inst.item_name, 
+                                      amount: formatInputNumber(monthlyRec.toString()), wallet: wallets[0]
+                                    });
+                                  }} 
+                                  className="flex-1 py-2.5 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <i className="fa-solid fa-money-bill-wave"></i> Bayar
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================== TAB ACARA KHUSUS ===================== */}
             {activeTab === 'events' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
@@ -1568,7 +1731,6 @@
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Create Event */}
                   <div className="lg:col-span-1">
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
                       <h3 className="font-bold mb-6 text-lg text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-plus-circle text-indigo-600 dark:text-indigo-400"></i> Buat Proyek Acara</h3>
@@ -1586,7 +1748,6 @@
                     </div>
                   </div>
 
-                  {/* Events List */}
                   <div className="lg:col-span-2 space-y-6">
                     {events.length === 0 ? (
                       <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -1625,7 +1786,6 @@
                               </div>
                            </div>
 
-                           {/* Progress Bar */}
                            <div className="relative h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-3">
                               <div className={`h-full transition-all duration-1000 ${isOver ? 'bg-rose-500' : 'bg-indigo-600'}`} style={{ width: `${stat.percent}%` }}></div>
                            </div>
@@ -1634,7 +1794,7 @@
                                <i className={`fa-solid ${isOver ? 'fa-triangle-exclamation' : 'fa-check-circle'} mr-1.5`}></i>
                                {isOver ? 'Anggaran Terlampaui!' : 'Kondisi Anggaran Aman'}
                              </p>
-                             <button onClick={() => { setSearchTerm(ev.event_name); setActiveTab('dashboard'); }} className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline py-2 px-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
+                             <button onClick={() => { setSearchTerm(ev.event_name); changeTab('dashboard'); }} className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline py-2 px-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
                                Rincian Belanja <i className="fa-solid fa-arrow-right ml-1"></i>
                              </button>
                            </div>
@@ -1646,7 +1806,7 @@
               </div>
             )}
 
-            {/* --- TAB: TRIP PLANNER --- */}
+            {/* ===================== TAB PERJALANAN (TRIP PLANNER) ===================== */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
@@ -1658,7 +1818,6 @@
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Create Trip Form */}
                   <div className="lg:col-span-1">
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-24">
                       <h3 className="font-bold mb-6 text-lg text-slate-900 dark:text-white flex items-center gap-2">
@@ -1672,8 +1831,6 @@
                         <div>
                           <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Destinasi</label>
                           <input type="text" value={newTripDest} onChange={e => setNewTripDest(e.target.value)} placeholder="Cth: Bali / Tokyo" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
-                          
-                          {/* SMART QUICK LINKS */}
                           {newTripDest && (
                             <div className="flex gap-3 mt-3 animate-fade-in-up">
                               <a href={`https://www.google.com/search?q=Harga+tiket+pesawat+ke+${encodeURIComponent(newTripDest)}`} target="_blank" rel="noreferrer" className="flex-1 text-center py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold transition-colors border border-blue-100 dark:border-blue-800">
@@ -1700,7 +1857,6 @@
                     </div>
                   </div>
 
-                  {/* Trips List */}
                   <div className="lg:col-span-2 space-y-6">
                     {trips.length === 0 ? (
                       <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -1709,7 +1865,6 @@
                       </div>
                     ) : trips.map(trip => {
                       const budget = parseFloat(trip.budget_limit) || 0;
-                      
                       return (
                         <div key={trip.id} className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 group flex flex-col md:flex-row gap-6 items-center">
                           <div className="w-full md:w-1/3 text-center md:text-left border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-700 pb-4 md:pb-0 md:pr-6 relative">
@@ -1732,13 +1887,12 @@
                               </div>
                             </div>
                             
-                            {/* Actions */}
                             <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                                <button onClick={() => {
                                   setGoalTitle(`Trip: ${trip.destination}`);
                                   setGoalTarget(formatInputNumber(budget.toString()));
                                   setGoalDeadline(trip.date);
-                                  setActiveTab('savings');
+                                  changeTab('savings');
                                   showToast("Beralih ke form Tabungan. Data rencana sudah disalin!", "info");
                                }} className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-colors">
                                   <i className="fa-solid fa-piggy-bank mr-1"></i> Jadikan Target Tabungan
@@ -1756,7 +1910,7 @@
               </div>
             )}
 
-            {/* --- TAB: PATUNGAN (SPLIT BILL) --- */}
+            {/* ===================== TAB PATUNGAN (SPLIT BILL) ===================== */}
             {activeTab === 'splitbill' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
@@ -1768,7 +1922,6 @@
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Left: Input Form */}
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-receipt text-fuchsia-600 dark:text-fuchsia-400"></i> Detail Tagihan</h3>
                     
@@ -1788,7 +1941,7 @@
                     </div>
 
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                      {splitPersons.map((p, index) => (
+                      {splitPersons.map((p) => (
                         <div key={p.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
                           <div className="flex-1 space-y-2">
                             <input type="text" value={p.name} onChange={(e) => handlePersonChange(p.id, 'name', e.target.value)} placeholder="Nama Teman" className="w-full bg-transparent border-b border-slate-300 dark:border-slate-600 px-2 py-1 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-fuchsia-500" />
@@ -1802,7 +1955,6 @@
                     </div>
                   </div>
 
-                  {/* Right: Results */}
                   <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-calculator text-fuchsia-600 dark:text-fuchsia-400"></i> Hasil Pembagian Proporsional</h3>
                     
@@ -2005,16 +2157,14 @@
                     </button>
                   </div>
 
-                  {/* REALTIME LIVE PREVIEW (Estetika Kertas Nota/Kuitansi) */}
+                  {/* REALTIME LIVE PREVIEW */}
                   <div className={`space-y-4 ${privacyFilter}`}>
                     <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Pratinjau Kuitansi (Live Preview)</h3>
                     
                     <div className="bg-white text-slate-800 border-2 border-slate-200/60 p-6 sm:p-8 rounded-2xl shadow-xl relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white to-slate-50 border-double border-4">
                       
-                      {/* Sobek Kertas Efek */}
                       <div className="absolute top-0 left-0 right-0 h-1.5 bg-[linear-gradient(45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%),linear-gradient(-45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%)] bg-[length:12px_12px] opacity-10"></div>
 
-                      {/* Header Preview */}
                       <div className="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
                         <div>
                           <span className="text-xs font-black tracking-widest text-indigo-600 uppercase flex items-center gap-1.5">
@@ -2028,48 +2178,39 @@
                         </div>
                       </div>
 
-                      {/* Detail Data */}
                       <div className="space-y-3.5 text-xs">
                         <div className="flex justify-between border-b border-slate-100 pb-2">
                           <span className="text-slate-400 font-medium">Tanggal:</span>
                           <span className="font-semibold text-slate-700">{formatDate(invoiceDate)}</span>
                         </div>
-
                         <div className="flex justify-between border-b border-slate-100 pb-2">
                           <span className="text-slate-400 font-medium">
                             {invoiceType === 'income' ? 'Diterima Dari:' : 'Dibayarkan Kepada:'}
                           </span>
                           <span className="font-bold text-slate-900">{invoiceParty || '-'}</span>
                         </div>
-
                         <div className="space-y-1">
                           <span className="text-slate-400 font-medium block">Uang Sejumlah:</span>
                           <span className="font-semibold text-slate-700 italic bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/60 block text-[11px] leading-relaxed text-center">
                             *** {invoiceAmount ? terbilang(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Nol'} Rupiah ***
                           </span>
                         </div>
-
                         <div className="flex justify-between border-b border-slate-100 pb-2">
                           <span className="text-slate-400 font-medium">Untuk Keperluan:</span>
                           <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">{invoiceDesc || '-'}</span>
                         </div>
                       </div>
 
-                      {/* Footer Cetak & Signatures */}
-                      <div className="flex justify-between items-end mt-8 pt-5 border-t border-slate-200">
-                        
-                        {/* Jumlah Besar */}
+                      <div className="flex flex-col sm:flex-row justify-between items-center mt-10 pt-6 border-t-2 border-slate-200 gap-6">
                         <div className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2">
                           <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Total</span>
                           <span className="text-lg font-black tracking-tight">
                             {invoiceAmount ? formatRupiah(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Rp 0'}
                           </span>
                         </div>
-
-                        {/* Stempel Sukses/LUNAS Skewed */}
                         <div className="flex items-center gap-4 text-center relative select-none">
-                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-600/90 uppercase font-black tracking-widest text-lg px-4 py-1.5 rounded-xl rotate-[-12deg] select-none bg-white/40 backdrop-blur-xs">
-                            <i className="fa-solid fa-circle-check mr-1.5"></i> LUNAS
+                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
+                            LUNAS
                           </div>
                           <div className="w-24">
                             <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Metode Dana</span>
@@ -2080,12 +2221,9 @@
                             <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{currentUserName}</span>
                           </div>
                         </div>
-
                       </div>
-
                     </div>
                   </div>
-
                 </div>
               </div>
             )}
@@ -2225,23 +2363,23 @@
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => setActiveTab('installments')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                  <button onClick={() => changeTab('installments')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
                     <div className="w-14 h-14 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-credit-card"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Cicilan</span>
                   </button>
-                  <button onClick={() => setActiveTab('events')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                  <button onClick={() => changeTab('events')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
                     <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-calendar-star"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Acara Khusus</span>
                   </button>
-                  <button onClick={() => setActiveTab('insights')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                  <button onClick={() => changeTab('insights')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
                     <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-lightbulb"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Laporan Pintar</span>
                   </button>
-                  <button onClick={() => setActiveTab('invoice')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
+                  <button onClick={() => changeTab('invoice')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
                     <div className="w-14 h-14 bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-file-invoice-dollar"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Kuitansi</span>
                   </button>
-                  <button onClick={() => setActiveTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
+                  <button onClick={() => changeTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
                     <div className="w-14 h-14 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-gear"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Pengaturan</span>
                   </button>
@@ -2253,24 +2391,24 @@
 
           {/* MOBILE BOTTOM NAVIGATION */}
           {isLoggedIn && (
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-2 z-50 pb-safe">
-              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-2 z-50 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                 <i className="fa-solid fa-house text-xl mb-1"></i>
                 <span className="text-[10px] font-bold">Beranda</span>
               </button>
-              <button onClick={() => setActiveTab('savings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+              <button onClick={() => changeTab('savings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                 <i className="fa-solid fa-piggy-bank text-xl mb-1"></i>
                 <span className="text-[10px] font-bold">Tabungan</span>
               </button>
-              <button onClick={() => setActiveTab('trips')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'trips' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+              <button onClick={() => changeTab('trips')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'trips' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                 <i className="fa-solid fa-plane-departure text-xl mb-1"></i>
                 <span className="text-[10px] font-bold">Trip</span>
               </button>
-              <button onClick={() => setActiveTab('splitbill')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'splitbill' ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+              <button onClick={() => changeTab('splitbill')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'splitbill' ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                 <i className="fa-solid fa-users-viewfinder text-xl mb-1"></i>
                 <span className="text-[10px] font-bold">Split</span>
               </button>
-              <button onClick={() => setActiveTab('more')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'more' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+              <button onClick={() => changeTab('more')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'more' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
                 <i className="fa-solid fa-grip text-xl mb-1"></i>
                 <span className="text-[10px] font-bold">Lainnya</span>
               </button>
