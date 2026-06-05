@@ -200,6 +200,9 @@
       const [category, setCategory] = useState(defaultCategories.expense[0]);
       const [date, setDate] = useState(getLocalDateString());
       
+      // State Edit Transaksi
+      const [editingTxId, setEditingTxId] = useState(null);
+      
       // State Kategori & Dompet
       const [categories, setCategories] = useState(defaultCategories);
       const [wallets, setWallets] = useState(defaultWallets);
@@ -762,13 +765,36 @@
         showToast("Jadwal (.ics) berhasil diunduh! Buka file untuk sinkronisasi.");
       };
 
+      // --- LOGIKA TRANSAKSI UTAMA (CREATE & UPDATE) ---
+      const handleEditClick = (tx) => {
+        setEditingTxId(tx.id);
+        setType(tx.type);
+        setAmount(formatInputNumber(tx.amount.toString()));
+        setDescription(tx.description);
+        setCategory(tx.category);
+        setDate(tx.date);
+        setSelectedWallet(tx.wallet || wallets[0]);
+        setSelectedEventId(tx.event_id || '');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const cancelEdit = () => {
+        setEditingTxId(null);
+        setType('expense');
+        setAmount('');
+        setDescription('');
+        setCategory(categories['expense'][0]);
+        setDate(getLocalDateString());
+        setSelectedEventId('');
+      };
+
       const handleSubmit = async (e) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount.toString().replace(/\./g, ''));
         if (!numericAmount || !description || !category || !date || !selectedWallet) return;
         
         setIsLoading(true);
-        const newTx = { 
+        const txData = { 
             type, 
             amount: numericAmount, 
             description, 
@@ -778,18 +804,30 @@
             user_email: user.email,
             event_id: selectedEventId || null 
         };
-        const { data, error } = await supabase.from('transactions').insert([newTx]).select();
-        
-        if (error) {
-          showToast("Gagal menyimpan data! Hubungkan Supabase dengan benar.", "error");
-          console.error("Supabase Error:", error);
-        } else if (data) {
-          setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setAmount(''); setDescription(''); setSelectedEventId(''); setDate(getLocalDateString());
-          showToast("Transaksi berhasil dicatat!");
-          
-          if (type === 'income' && numericAmount >= 100000) {
-            setIncomeSplitter({ isOpen: true, amount: numericAmount });
+
+        if (editingTxId) {
+          // UPDATE MODE
+          const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
+          if (error) {
+            showToast("Gagal memperbarui data!", "error");
+          } else {
+            setTransactions(prev => prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t).sort((a,b) => new Date(b.date) - new Date(a.date)));
+            showToast("Transaksi berhasil diperbarui!");
+            cancelEdit();
+          }
+        } else {
+          // CREATE MODE
+          const { data, error } = await supabase.from('transactions').insert([txData]).select();
+          if (error) {
+            showToast("Gagal menyimpan data!", "error");
+          } else if (data) {
+            setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            cancelEdit(); // Memanggil cancelEdit untuk reset state ke kondisi default
+            showToast("Transaksi berhasil dicatat!");
+            
+            if (type === 'income' && numericAmount >= 100000) {
+              setIncomeSplitter({ isOpen: true, amount: numericAmount });
+            }
           }
         }
         setIsLoading(false);
@@ -1414,18 +1452,21 @@
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sticky top-24">
                       <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <i className="fa-solid fa-plus text-indigo-600 dark:text-indigo-400"></i> Catat Transaksi
+                          <i className={`fa-solid ${editingTxId ? 'fa-pen-to-square' : 'fa-plus'} text-indigo-600 dark:text-indigo-400`}></i> 
+                          {editingTxId ? 'Edit Transaksi' : 'Catat Transaksi'}
                         </h3>
-                        <button 
-                          type="button" 
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
-                          disabled={isScanning}
-                          title="Otomatis isi form dari foto struk"
-                        >
-                          {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
-                          {isScanning ? 'Membaca...' : 'Scan AI'}
-                        </button>
+                        {!editingTxId && (
+                          <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+                            disabled={isScanning}
+                            title="Otomatis isi form dari foto struk"
+                          >
+                            {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
+                            {isScanning ? 'Membaca...' : 'Scan AI'}
+                          </button>
+                        )}
                         <input type="file" accept="image/*" ref={fileInputRef} onChange={handleScanReceipt} className="hidden" />
                       </div>
 
@@ -1468,9 +1509,17 @@
                             {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name}</option>)}
                           </select>
                         </div>
-                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors">
-                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Transaksi'}
-                        </button>
+                        
+                        <div className="flex gap-2 mt-2">
+                          {editingTxId && (
+                            <button type="button" onClick={cancelEdit} className="w-1/3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium py-3 rounded-xl transition-colors">
+                              Batal
+                            </button>
+                          )}
+                          <button type="submit" disabled={isLoading || isScanning} className={`${editingTxId ? 'w-2/3' : 'w-full'} bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors`}>
+                            {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : (editingTxId ? 'Perbarui Transaksi' : 'Simpan Transaksi')}
+                          </button>
+                        </div>
                       </form>
                     </div>
                   </div>
@@ -1501,7 +1550,7 @@
                           const dompetName = t.wallet || 'Dompet Utama';
                           const ev = events.find(e => e.id === t.event_id);
                           return (
-                            <div key={t.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent hover:border-slate-100 dark:hover:border-slate-600 transition-all">
+                            <div key={t.id} className={`group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 border transition-all ${editingTxId === t.id ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20' : 'border-transparent hover:border-slate-100 dark:hover:border-slate-600'}`}>
                               <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 flex items-center justify-center rounded-xl shrink-0 ${isIncome ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400'}`}>{getCategoryIcon(t.category, t.type)}</div>
                                 <div>
@@ -1517,16 +1566,8 @@
                               <div className="flex items-center gap-4 mt-3 sm:mt-0 pl-16 sm:pl-0 shrink-0">
                                 <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'} ${privacyFilter}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
                                 <div className="flex gap-1">
-                                  <button onClick={() => {
-                                      setInvoiceType(t.type);
-                                      setInvoiceAmount(formatInputNumber(t.amount.toString()));
-                                      setInvoiceDesc(t.description);
-                                      setInvoiceDate(t.date);
-                                      setInvoiceWallet(t.wallet || 'Dompet Utama');
-                                      setInvoiceParty(t.type === 'income' ? 'Diterima Dari: Pengirim Dana' : 'Dibayarkan Kepada: Penerima Dana');
-                                      changeTab('invoice');
-                                      showToast("Data transaksi berhasil dimuat ke kuitansi!");
-                                  }} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
+                                  <button onClick={() => handleEditClick(t)} className="text-slate-400 hover:text-blue-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Edit Transaksi"><i className="fa-solid fa-pen"></i></button>
+                                  <button onClick={() => handleLoadToInvoice(t)} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
                                   <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus"><i className="fa-solid fa-trash"></i></button>
                                 </div>
                               </div>
@@ -2217,7 +2258,6 @@
                           </div>
                           <div className="w-24">
                             <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
-                            {/* BUG FIX DI SINI */}
                             <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{user?.user_metadata?.name || 'Staff'}</span>
                           </div>
                         </div>
