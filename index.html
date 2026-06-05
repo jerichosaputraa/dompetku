@@ -1058,7 +1058,6 @@
                   </div>
 
                   <div class="flex items-center gap-12 text-center relative">
-                    
                     <div class="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-600/90 uppercase font-black tracking-widest text-lg px-4 py-1.5 rounded-xl rotate-[-12deg] select-none bg-white/40 backdrop-blur-xs">
                       <i class="fa-solid fa-circle-check mr-1.5"></i> LUNAS
                     </div>
@@ -1469,7 +1468,7 @@
                             {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name}</option>)}
                           </select>
                         </div>
-                        <button type="submit" disabled={isLoading || isScanning} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors">
+                        <button type="submit" disabled={isLoading} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors">
                           {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Transaksi'}
                         </button>
                       </form>
@@ -1806,7 +1805,7 @@
               </div>
             )}
 
-            {/* ===================== TAB PERJALANAN (TRIP PLANNER) ===================== */}
+            {/* --- TAB: PERJALANAN (TRIP PLANNER) --- */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
@@ -1910,7 +1909,7 @@
               </div>
             )}
 
-            {/* ===================== TAB PATUNGAN (SPLIT BILL) ===================== */}
+            {/* --- TAB: PATUNGAN (SPLIT BILL) --- */}
             {activeTab === 'splitbill' && (
               <div className="animate-fade-in space-y-8">
                 <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
@@ -2218,7 +2217,8 @@
                           </div>
                           <div className="w-24">
                             <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
-                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{currentUserName}</span>
+                            {/* BUG FIX DI SINI */}
+                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{user?.user_metadata?.name || 'Staff'}</span>
                           </div>
                         </div>
                       </div>
@@ -2232,7 +2232,6 @@
             {activeTab === 'settings' && (
               <div className="animate-fade-in max-w-3xl mx-auto space-y-8">
                 
-                {/* Bagian Akun */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-circle-user text-indigo-500"></i> Akun Saya</h3>
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-700">
@@ -2251,7 +2250,6 @@
                   </form>
                 </div>
 
-                {/* Bagian Tampilan */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-palette text-indigo-500"></i> Tampilan Visual</h3>
@@ -2262,11 +2260,10 @@
                   </button>
                 </div>
 
-                {/* Bagian Manajemen Dompet */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-wallet text-indigo-500"></i> Kelola Dompet / Sumber Dana</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Tambahkan akun bank atau e-wallet (Maks. untuk memilah saldo Anda).</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Tambahkan akun bank atau e-wallet.</p>
                   </div>
                   
                   <form onSubmit={handleAddWallet} className="flex gap-3 mb-6">
@@ -2284,7 +2281,6 @@
                   </div>
                 </div>
 
-                {/* Bagian Kategori Kustom */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-tags text-indigo-500"></i> Kelola Kategori</h3>
