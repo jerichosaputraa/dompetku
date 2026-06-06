@@ -98,6 +98,7 @@
       }
     };
 
+    // --- GRAFIK DONAT (DOUGHNUT) ---
     function TransactionChart({ transactions, type, isDarkMode }) {
       const canvasRef = useRef(null);
       const chartRef = useRef(null);
@@ -146,6 +147,82 @@
           {!hasData ? <p className="text-slate-400 dark:text-slate-500 text-sm italic">Belum ada data {type === 'expense' ? 'pengeluaran' : 'pemasukan'}.</p> : <canvas ref={canvasRef}></canvas>}
         </div>
       );
+    }
+
+    // --- GRAFIK GARIS TREN ARUS KAS ---
+    function CashflowLineChart({ transactions, filterMonth, filterYear, isDarkMode }) {
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        
+        let targetMonth = filterMonth !== 'all' ? parseInt(filterMonth) : new Date().getMonth() + 1;
+        let targetYear = filterYear !== 'all' ? parseInt(filterYear) : new Date().getFullYear();
+        
+        const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+        const labels = Array.from({length: daysInMonth}, (_, i) => i + 1);
+        
+        let incomeData = new Array(daysInMonth).fill(0);
+        let expenseData = new Array(daysInMonth).fill(0);
+
+        transactions.forEach(t => {
+          if (!t.date) return;
+          const tDate = new Date(t.date);
+          if (tDate.getMonth() + 1 === targetMonth && tDate.getFullYear() === targetYear) {
+            const dayIdx = tDate.getDate() - 1;
+            const amt = parseFloat(t.amount || 0);
+            if (t.type === 'income') incomeData[dayIdx] += amt;
+            else expenseData[dayIdx] += amt;
+          }
+        });
+
+        if (chartRef.current) chartRef.current.destroy();
+
+        const ctx = canvasRef.current.getContext('2d');
+        chartRef.current = new window.Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Pemasukan',
+                data: incomeData,
+                borderColor: '#10b981', // emerald-500
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+              },
+              {
+                label: 'Pengeluaran',
+                data: expenseData,
+                borderColor: '#f43f5e', // rose-500
+                backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+              }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              x: { grid: { display: false, color: isDarkMode ? '#334155' : '#e2e8f0' }, ticks: { color: isDarkMode ? '#94a3b8' : '#64748b' } },
+              y: { grid: { borderDash: [4, 4], color: isDarkMode ? '#334155' : '#e2e8f0' }, ticks: { color: isDarkMode ? '#94a3b8' : '#64748b', callback: (val) => 'Rp ' + (val / 1000) + 'K' } }
+            },
+            plugins: {
+              legend: { position: 'top', labels: { color: isDarkMode ? '#cbd5e1' : '#475569', usePointStyle: true } },
+              tooltip: { callbacks: { label: function(c) { return `${c.dataset.label}: ${formatRupiah(c.raw)}`; } } }
+            }
+          }
+        });
+
+        return () => { if (chartRef.current) chartRef.current.destroy(); };
+      }, [transactions, filterMonth, filterYear, isDarkMode]);
+
+      return <div className="h-64 w-full"><canvas ref={canvasRef}></canvas></div>;
     }
 
     // --- KOMPONEN UTAMA APP ---
@@ -209,9 +286,11 @@
       const [selectedWallet, setSelectedWallet] = useState(defaultWallets[0]);
       
       // Filter State
+      const currentSysMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+      const currentSysYear = new Date().getFullYear().toString();
       const [searchTerm, setSearchTerm] = useState('');
-      const [filterMonth, setFilterMonth] = useState('all');
-      const [filterYear, setFilterYear] = useState('all');
+      const [filterMonth, setFilterMonth] = useState(currentSysMonth);
+      const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
 
       // Kantong Tabungan State
@@ -260,8 +339,10 @@
       const [invoiceWallet, setInvoiceWallet] = useState(defaultWallets[0]);
       const [invoiceNote, setInvoiceNote] = useState('Kuitansi ini sah dihasilkan secara digital melalui sistem FinansialKu.');
 
-      // OTHERS
+      // OTHERS (AI & Scanning)
       const [isScanning, setIsScanning] = useState(false);
+      const [isAiLoading, setIsAiLoading] = useState(false);
+      const [aiInsightText, setAiInsightText] = useState('');
       const fileInputRef = useRef(null);
       const [incomeSplitter, setIncomeSplitter] = useState({ isOpen: false, amount: 0 });
       const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
@@ -356,9 +437,12 @@
 
       const availableYears = useMemo(() => {
         const years = transactions.map(t => new Date(t.date).getFullYear());
-        return [...new Set(years)].sort((a, b) => b - a);
+        const uniqueYears = [...new Set(years)].sort((a, b) => b - a);
+        if (!uniqueYears.includes(new Date().getFullYear())) uniqueYears.push(new Date().getFullYear());
+        return uniqueYears.sort((a, b) => b - a);
       }, [transactions]);
 
+      // Array transaksi Global bulan ini untuk Dashboard & Chart Donat
       const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
           const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -389,7 +473,8 @@
         const balances = {};
         wallets.forEach(w => balances[w] = 0);
         
-        filteredTransactions.forEach(t => {
+        // Kita hitung dari SELURUH transaksi, bukan yg terfilter bulan ini
+        transactions.forEach(t => {
           const w = t.wallet || 'Dompet Utama';
           if (balances[w] === undefined) balances[w] = 0; 
           const numAmount = parseFloat(t.amount);
@@ -397,7 +482,7 @@
           else balances[w] -= numAmount;
         });
         return balances;
-      }, [filteredTransactions, wallets]);
+      }, [transactions, wallets]);
 
       const totalSavingsCollected = useMemo(() => {
         return savingsGoals.reduce((sum, goal) => sum + parseFloat(goal.current_amount || 0), 0);
@@ -627,144 +712,6 @@
         setIsLoading(false);
       };
 
-      // --- LOGIKA INSIGHTS & EMERGENCY FUND ---
-      const insights = useMemo(() => {
-        if (filteredTransactions.length === 0) return null;
-
-        let expenses = filteredTransactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
-        let savings = filteredTransactions.filter(t => t.type === 'expense' && t.category === 'Tabungan');
-
-        let catMap = {};
-        expenses.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + parseFloat(t.amount || 0));
-        let biggestCat = Object.keys(catMap).reduce((a, b) => catMap[a] > catMap[b] ? a : b, null);
-        let biggestCatAmount = biggestCat ? catMap[biggestCat] : 0;
-
-        let dayMap = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-        expenses.forEach(t => {
-            if(!t.date) return;
-            const d = new Date(t.date).getDay();
-            dayMap[d] += parseFloat(t.amount || 0);
-        });
-        let biggestDayIdx = Object.keys(dayMap).reduce((a, b) => dayMap[a] > dayMap[b] ? a : b, 0);
-        let biggestDayAmount = dayMap[biggestDayIdx];
-        let biggestDayName = biggestDayAmount > 0 ? dayNames[biggestDayIdx] : '-';
-
-        let totalSaved = savings.reduce((acc, t) => acc + parseFloat(t.amount || 0), 0);
-        let savingsRatio = 0;
-        if (totalIncome > 0) {
-            savingsRatio = ((totalSaved / totalIncome) * 100).toFixed(1);
-        }
-
-        return { biggestCat, biggestCatAmount, biggestDayName, biggestDayAmount, savingsRatio, totalSaved };
-      }, [filteredTransactions, totalIncome]);
-
-      const emergencyFund = useMemo(() => {
-        if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
-        
-        const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
-        let monthlyExpensesMap = {};
-        expenses.forEach(t => {
-            if(!t.date) return;
-            const monthKey = t.date.substring(0, 7); 
-            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount || 0);
-        });
-        
-        const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
-        let totalAllExpenses = 0;
-        Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
-        
-        let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
-        
-        let globalBalance = transactions.reduce((acc, curr) => {
-            return curr.type === 'income' ? acc + parseFloat(curr.amount || 0) : acc - parseFloat(curr.amount || 0);
-        }, 0);
-        
-        let globalTotalFunds = globalBalance + totalSavingsCollected;
-        let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
-
-        return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
-      }, [transactions, totalSavingsCollected]);
-
-
-      const handleExportCSV = () => {
-        if (filteredTransactions.length === 0) {
-          showToast("Tidak ada data untuk diekspor!", "error"); return;
-        }
-        const headers = ['Tanggal', 'Tipe', 'Dompet', 'Kategori', 'Keterangan', 'Nominal (Rp)', 'Acara'];
-        const csvRows = filteredTransactions.map(t => [ 
-          t.date, 
-          t.type === 'income' ? 'Pemasukan' : 'Pengeluaran', 
-          t.wallet || 'Dompet Utama',
-          t.category, 
-          `"${t.description}"`, 
-          t.amount,
-          `"${events.find(e => e.id === t.event_id)?.event_name || '-'}"`
-        ]);
-        const csvContent = headers.join(',') + '\n' + csvRows.map(row => row.join(',')).join('\n');
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `Laporan_FinansialKu_${filterMonth}_${filterYear}.csv`;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      };
-
-      const handleExportCalendar = () => {
-        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//FinansialKu//ID\nCALSCALE:GREGORIAN\n";
-        let hasEvents = false;
-
-        savingsGoals.forEach(goal => {
-          if (goal.deadline && parseFloat(goal.current_amount || 0) < parseFloat(goal.target_amount || 0)) {
-            const d = new Date(goal.deadline);
-            if (!isNaN(d.getTime())) {
-              const dateStr = d.toISOString().replace(/[-:]/g, '').substring(0, 8);
-              icsContent += "BEGIN:VEVENT\n";
-              icsContent += `SUMMARY:Tenggat Tabungan: ${goal.title}\n`;
-              icsContent += `DTSTART;VALUE=DATE:${dateStr}\n`;
-              icsContent += `DTEND;VALUE=DATE:${dateStr}\n`;
-              icsContent += `DESCRIPTION:Selesaikan target tabungan sebesar ${formatRupiah(goal.target_amount)} untuk ${goal.title}. Jangan menyerah!\n`;
-              icsContent += "END:VEVENT\n";
-              hasEvents = true;
-            }
-          }
-        });
-
-        installments.forEach(inst => {
-          const total = parseFloat(inst.total_amount) || 0;
-          const paid = parseFloat(inst.paid_amount) || 0;
-          if (paid < total) {
-            const d = new Date();
-            d.setMonth(d.getMonth() + 1);
-            d.setDate(1);
-            const dateStr = d.toISOString().replace(/[-:]/g, '').substring(0, 8);
-            
-            icsContent += "BEGIN:VEVENT\n";
-            icsContent += `SUMMARY:Bayar Cicilan: ${inst.item_name}\n`;
-            icsContent += `DTSTART;VALUE=DATE:${dateStr}\n`;
-            icsContent += `DTEND;VALUE=DATE:${dateStr}\n`;
-            icsContent += `DESCRIPTION:Anda memiliki sisa tagihan sebesar ${formatRupiah(total - paid)} untuk cicilan ${inst.item_name}. Segera bayar untuk menghindari denda.\n`;
-            icsContent += "END:VEVENT\n";
-            hasEvents = true;
-          }
-        });
-
-        icsContent += "END:VCALENDAR";
-
-        if (!hasEvents) {
-          showToast("Tidak ada tabungan aktif atau cicilan untuk diekspor ke kalender.", "error");
-          return;
-        }
-
-        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8;' });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "Jadwal_FinansialKu.ics";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast("Jadwal (.ics) berhasil diunduh! Buka file untuk sinkronisasi.");
-      };
-
       // --- LOGIKA TRANSAKSI UTAMA (CREATE & UPDATE) ---
       const handleEditClick = (tx) => {
         setEditingTxId(tx.id);
@@ -863,6 +810,172 @@
             setIsLoading(false);
           }
         });
+      };
+
+      // --- ADVANCED INSIGHTS (LAPORAN PINTAR TERBARU) ---
+      const smartInsights = useMemo(() => {
+        if (transactions.length === 0) return null;
+
+        let targetMonth = filterMonth !== 'all' ? parseInt(filterMonth) : new Date().getMonth() + 1;
+        let targetYear = filterYear !== 'all' ? parseInt(filterYear) : new Date().getFullYear();
+
+        let prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+        let prevYear = targetMonth === 1 ? targetYear - 1 : targetYear;
+
+        // Pisahkan data bulan INI dan bulan LALU
+        const currentMonthTxs = transactions.filter(t => {
+          const d = new Date(t.date);
+          return (d.getMonth() + 1 === targetMonth) && (d.getFullYear() === targetYear);
+        });
+
+        const prevMonthTxs = transactions.filter(t => {
+          const d = new Date(t.date);
+          return (d.getMonth() + 1 === prevMonth) && (d.getFullYear() === prevYear);
+        });
+
+        let cmIncome = 0; let cmExpense = 0; let cmSaved = 0;
+        let catMap = {}; let dayMap = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+
+        currentMonthTxs.forEach(t => {
+          const amt = parseFloat(t.amount || 0);
+          if (t.type === 'income') {
+            cmIncome += amt;
+          } else {
+            cmExpense += amt;
+            if (t.category === 'Tabungan') cmSaved += amt;
+            else {
+              catMap[t.category] = (catMap[t.category] || 0) + amt;
+              dayMap[new Date(t.date).getDay()] += amt;
+            }
+          }
+        });
+
+        let pmIncome = 0; let pmExpense = 0;
+        prevMonthTxs.forEach(t => {
+          const amt = parseFloat(t.amount || 0);
+          if (t.type === 'income') pmIncome += amt;
+          else pmExpense += amt;
+        });
+
+        // Kategori & Hari Terboros
+        let biggestCat = Object.keys(catMap).reduce((a, b) => catMap[a] > catMap[b] ? a : b, null);
+        let biggestCatAmount = biggestCat ? catMap[biggestCat] : 0;
+        
+        let biggestDayIdx = Object.keys(dayMap).reduce((a, b) => dayMap[a] > dayMap[b] ? a : b, 0);
+        let biggestDayAmount = dayMap[biggestDayIdx];
+        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        let biggestDayName = biggestDayAmount > 0 ? dayNames[biggestDayIdx] : '-';
+
+        // Hitungan Persentase MoM
+        let expenseChange = pmExpense === 0 ? (cmExpense > 0 ? 100 : 0) : ((cmExpense - pmExpense) / pmExpense) * 100;
+        let isExpenseUp = expenseChange > 0;
+
+        // Health Score Logic
+        let savingsRatio = cmIncome > 0 ? ((cmSaved / cmIncome) * 100).toFixed(1) : 0;
+        let healthStatus = "Cukup Baik";
+        let healthMessage = "Porsi keuanganmu wajar, tapi masih bisa dioptimalkan.";
+        let healthColor = "text-amber-500 bg-amber-50 dark:bg-amber-900/30 border-amber-200";
+        let healthIcon = "fa-face-meh";
+
+        if (cmExpense > cmIncome && cmIncome > 0) {
+          healthStatus = "Bocor Teralus!";
+          healthMessage = "Bahaya! Pengeluaranmu lebih besar dari pendapatan bulan ini.";
+          healthColor = "text-rose-600 bg-rose-50 dark:bg-rose-900/30 border-rose-200";
+          healthIcon = "fa-face-dizzy";
+        } else if (savingsRatio >= 20 && cmIncome > 0) {
+          healthStatus = "Sangat Sehat";
+          healthMessage = "Keren! Kamu berhasil menabung minimal 20% dari gaji bulan ini.";
+          healthColor = "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200";
+          healthIcon = "fa-face-grin-stars";
+        }
+
+        // Safe to Spend (Limit Harian)
+        let safeToSpend = 0;
+        let daysLeft = 0;
+        const today = new Date();
+        if (targetMonth === today.getMonth() + 1 && targetYear === today.getFullYear()) {
+          const daysInCurrentMonth = new Date(targetYear, targetMonth, 0).getDate();
+          daysLeft = daysInCurrentMonth - today.getDate() + 1; // Termasuk hari ini
+          const currentBalance = cmIncome - cmExpense;
+          if (currentBalance > 0 && daysLeft > 0) {
+            safeToSpend = currentBalance / daysLeft;
+          }
+        }
+
+        return { 
+          cmIncome, cmExpense, pmIncome, pmExpense, expenseChange, isExpenseUp,
+          biggestCat, biggestCatAmount, biggestDayName, biggestDayAmount, savingsRatio,
+          healthStatus, healthMessage, healthColor, healthIcon,
+          safeToSpend, daysLeft, targetMonth
+        };
+      }, [transactions, filterMonth, filterYear]);
+
+      const emergencyFund = useMemo(() => {
+        if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
+        const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
+        let monthlyExpensesMap = {};
+        expenses.forEach(t => {
+            if(!t.date) return;
+            const monthKey = t.date.substring(0, 7); 
+            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount || 0);
+        });
+        const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
+        let totalAllExpenses = 0;
+        Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
+        let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
+        
+        let globalBalance = transactions.reduce((acc, curr) => {
+            return curr.type === 'income' ? acc + parseFloat(curr.amount || 0) : acc - parseFloat(curr.amount || 0);
+        }, 0);
+        
+        let globalTotalFunds = globalBalance + totalSavingsCollected;
+        let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
+
+        return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
+      }, [transactions, totalSavingsCollected]);
+
+      // --- LOGIKA AI FINANCIAL ADVISOR ---
+      const handleGenerateAIInsight = async () => {
+        if (!smartInsights) return;
+        setIsAiLoading(true);
+        setAiInsightText('');
+        
+        try {
+          const apiKey = ""; // Disuntik otomatis oleh Canvas
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+          const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
+          Pemasukan: Rp ${smartInsights.cmIncome}
+          Pengeluaran: Rp ${smartInsights.cmExpense}
+          Kategori Paling Boros: ${smartInsights.biggestCat} (Rp ${smartInsights.biggestCatAmount})
+          Uang yang ditabung: ${smartInsights.savingsRatio}% dari pemasukan.
+          Sisa saldo bulan ini: Rp ${smartInsights.cmIncome - smartInsights.cmExpense}
+          Gunakan bahasa Indonesia yang ramah, profesional, dan berikan tips nyata yang *actionable*. Format dalam bentuk paragraf biasa tanpa markdown aneh-aneh.`;
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }]
+            })
+          });
+
+          if (!response.ok) throw new Error("Gagal mengambil data dari AI.");
+          
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (text) {
+            setAiInsightText(text);
+          } else {
+            throw new Error("Respon AI kosong.");
+          }
+        } catch (error) {
+          console.error(error);
+          setAiInsightText("Maaf, Asisten AI sedang mengalami gangguan koneksi. Secara singkat: Pastikan pengeluaran tidak melebihi pemasukan, dan prioritaskan mengurangi budget pada kategori terboros Anda bulan ini.");
+        } finally {
+          setIsAiLoading(false);
+        }
       };
 
       const handleCreateGoal = async (e) => {
@@ -1397,7 +1510,7 @@
                 <button onClick={() => changeTab('events')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'events' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-calendar-star mr-1.5"></i> Acara</button>
                 <button onClick={() => changeTab('trips')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'trips' ? 'text-cyan-600 border-cyan-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-plane-departure mr-1.5"></i> Perjalanan</button>
                 <button onClick={() => changeTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
-                <button onClick={() => changeTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan</button>
+                <button onClick={() => changeTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan Pintar</button>
                 <button onClick={() => changeTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
                 <button onClick={() => changeTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
               </div>
@@ -2032,86 +2145,172 @@
               </div>
             )}
 
-            {/* ===================== TAB LAPORAN PINTAR ===================== */}
+            {/* ===================== TAB LAPORAN PINTAR (TERBARU) ===================== */}
             {activeTab === 'insights' && (
-              <div className="animate-fade-in">
-                <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center relative overflow-hidden">
-                  <i className="fa-solid fa-lightbulb text-6xl text-indigo-400/30 absolute -right-2 -top-2"></i>
-                  <div className="relative z-10">
-                    <h2 className="text-3xl font-bold tracking-tight mb-2">Laporan Pintar Bulanan</h2>
-                    <p className="text-indigo-200 text-sm">Pelajari gaya finansial Anda agar lebih bijak mengatur uang.</p>
+              <div className="animate-fade-in space-y-6">
+                {/* Header Section */}
+                <div className="bg-indigo-600 dark:bg-indigo-700 rounded-3xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="relative z-10 text-center md:text-left">
+                    <h2 className="text-3xl font-black mb-2 flex items-center justify-center md:justify-start gap-3">
+                      <i className="fa-solid fa-lightbulb text-indigo-300"></i> Laporan Pintar
+                    </h2>
+                    <p className="text-indigo-200 text-sm">Analisis otomatis untuk gaya finansial yang lebih sehat.</p>
                   </div>
+                  
+                  {/* Selector Bulan & Tahun */}
+                  <div className="relative z-10 flex gap-3 w-full md:w-auto bg-indigo-800/40 p-2 rounded-xl backdrop-blur-sm">
+                    <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="flex-1 md:w-auto px-4 py-2.5 bg-white dark:bg-slate-800 border-none text-slate-900 dark:text-white rounded-lg font-bold text-sm cursor-pointer shadow-sm">
+                      <option value="all">Semua Bulan</option>
+                      {Array.from({length: 12}, (_, i) => { const m = String(i+1).padStart(2, '0'); return <option key={m} value={m}>{['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][i]}</option>; })}
+                    </select>
+                    <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="flex-1 md:w-auto px-4 py-2.5 bg-white dark:bg-slate-800 border-none text-slate-900 dark:text-white rounded-lg font-bold text-sm cursor-pointer shadow-sm">
+                      <option value="all">Semua Tahun</option>
+                      {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                    </select>
+                  </div>
+                  <i className="fa-solid fa-chart-line text-9xl absolute -right-6 -top-6 text-white/5"></i>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 mb-8 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 justify-center items-center">
-                  <span className="text-slate-500 dark:text-slate-400 text-sm font-medium mr-2">Fokus Analisis:</span>
-                  <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg font-medium text-sm">
-                    <option value="all">Semua Bulan</option>
-                    {Array.from({length: 12}, (_, i) => { const m = String(i+1).padStart(2, '0'); return <option key={m} value={m}>{['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][i]}</option>; })}
-                  </select>
-                  <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg font-medium text-sm">
-                    <option value="all">Semua Tahun</option>
-                    {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
-                  </select>
-                </div>
-
-                {!insights || filteredTransactions.length === 0 ? (
-                  <div className="text-center py-16 px-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
-                    <div className="bg-slate-100 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-chart-simple text-slate-400 text-3xl"></i></div>
-                    <h4 className="text-slate-900 dark:text-white font-medium mb-1">Data Belum Cukup</h4>
-                    <p className="text-slate-500 text-sm">Catat lebih banyak transaksi untuk melihat wawasan finansial Anda.</p>
+                {!smartInsights ? (
+                  <div className="text-center py-20 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl">
+                    <div className="bg-slate-100 dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-chart-simple text-slate-400 text-3xl"></i></div>
+                    <h4 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Data Belum Cukup</h4>
+                    <p className="text-slate-500 text-sm">Catat lebih banyak transaksi bulan ini untuk memunculkan analisis AI.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                      <div className="text-rose-500 bg-rose-100 dark:bg-rose-900/40 w-12 h-12 rounded-xl flex items-center justify-center mb-4"><i className="fa-solid fa-fire-flame-curved text-xl"></i></div>
-                      <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Kategori Terboros</h3>
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white mb-2 truncate">{insights.biggestCat || 'Belum ada'}</p>
-                      <p className={`text-sm text-rose-600 dark:text-rose-400 font-medium ${privacyFilter}`}>{insights.biggestCatAmount > 0 ? `Total: ${formatRupiah(insights.biggestCatAmount)}` : '-'}</p>
-                    </div>
-                    
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                      <div className="text-amber-500 bg-amber-100 dark:bg-amber-900/40 w-12 h-12 rounded-xl flex items-center justify-center mb-4"><i className="fa-solid fa-calendar-day text-xl"></i></div>
-                      <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Hari Paling Menguras</h3>
-                      <p className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{insights.biggestDayName}</p>
-                      <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">Sering jajan di hari ini.</p>
-                    </div>
-                    
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                      <div className="text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40 w-12 h-12 rounded-xl flex items-center justify-center mb-4"><i className="fa-solid fa-percent text-xl"></i></div>
-                      <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">Rasio Menabung</h3>
-                      <p className={`text-2xl font-bold text-slate-900 dark:text-white mb-2 ${privacyFilter}`}>{insights.savingsRatio}%</p>
-                      <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Dari pemasukan bulan ini tersimpan.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Analisis Dana Darurat */}
-                <div className="mt-6 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 shadow-xl border border-slate-700 relative overflow-hidden group">
-                  <div className="absolute -right-6 -top-6 text-slate-700/50 group-hover:text-slate-700/70 transition-colors">
-                    <i className="fa-solid fa-shield-halved text-9xl"></i>
-                  </div>
-                  <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6">
-                    <div className="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center shrink-0 border border-blue-500/30">
-                      <i className="fa-solid fa-truck-medical text-3xl"></i>
-                    </div>
-                    <div className="flex-1 text-center sm:text-left">
-                      <h3 className="text-lg font-bold text-white mb-1">Pelacak Dana Darurat (Emergency Fund)</h3>
-                      <p className="text-slate-400 text-sm mb-3">Berdasarkan rata-rata pengeluaran Anda sebesar <strong className={`text-slate-200 ${privacyFilter}`}>{formatRupiah(emergencyFund.avgMonthlyExpense)}/bulan</strong>.</p>
-                      <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
-                        <span className="bg-slate-950/50 border border-slate-700 px-3 py-1.5 rounded-lg text-sm text-slate-300">
-                          Total Dana Tersedia: <strong className={`text-white ${privacyFilter}`}>{formatRupiah(emergencyFund.globalTotalFunds)}</strong>
-                        </span>
+                  <>
+                    {/* Baris 1: Health Score & Safe to Spend */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* Financial Health Status */}
+                      <div className={`rounded-3xl p-6 border-2 flex items-center gap-6 ${smartInsights.healthColor}`}>
+                        <div className="text-5xl shrink-0 drop-shadow-sm"><i className={`fa-solid ${smartInsights.healthIcon}`}></i></div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Status Keuangan</p>
+                          <h3 className="text-2xl font-black mb-1">{smartInsights.healthStatus}</h3>
+                          <p className="text-sm font-medium opacity-90 leading-snug">{smartInsights.healthMessage}</p>
+                        </div>
                       </div>
+
+                      {/* Safe to Spend Limit */}
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-center relative overflow-hidden group">
+                        <i className="fa-solid fa-basket-shopping absolute -right-4 -bottom-4 text-7xl text-slate-50 dark:text-slate-800 group-hover:scale-110 transition-transform duration-500"></i>
+                        <div className="relative z-10">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Batas Jajan Harian</h3>
+                            {smartInsights.daysLeft > 0 ? (
+                              <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-1 rounded-md">Sisa {smartInsights.daysLeft} Hari</span>
+                            ) : (
+                              <span className="bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-md">Pilih Bulan Berjalan</span>
+                            )}
+                          </div>
+                          
+                          {smartInsights.daysLeft > 0 ? (
+                            <>
+                              <p className={`text-4xl font-black text-slate-900 dark:text-white tracking-tight ${privacyFilter}`}>
+                                {smartInsights.safeToSpend > 0 ? formatRupiah(smartInsights.safeToSpend) : 'Rp 0'}
+                              </p>
+                              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Agar saldo bulan ini cukup sampai akhir bulan.</p>
+                            </>
+                          ) : (
+                            <p className="text-lg font-bold text-slate-400 mt-2">Batas harian hanya tersedia untuk bulan ini.</p>
+                          )}
+                        </div>
+                      </div>
+
                     </div>
-                    <div className="text-center bg-slate-950/40 p-4 rounded-xl border border-slate-700/50 min-w-[140px]">
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Daya Tahan</p>
-                      <p className={`text-3xl font-black ${emergencyFund.survivalMonths >= 6 ? 'text-emerald-400' : emergencyFund.survivalMonths >= 3 ? 'text-amber-400' : 'text-rose-400'}`}>
-                        {emergencyFund.survivalMonths} <span className="text-lg font-medium text-slate-500">Bln</span>
-                      </p>
+
+                    {/* Baris 2: Grafik Garis Arus Kas & Analisis AI */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      {/* Trend Cashflow */}
+                      <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                          <i className="fa-solid fa-chart-area text-indigo-500"></i> Tren Arus Kas Harian
+                        </h3>
+                        <CashflowLineChart transactions={filteredTransactions} filterMonth={filterMonth} filterYear={filterYear} isDarkMode={isDarkMode} />
+                      </div>
+
+                      {/* Asisten AI Gemini */}
+                      <div className="lg:col-span-1 bg-gradient-to-b from-sky-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800 rounded-3xl p-6 shadow-sm border border-sky-100 dark:border-slate-700 flex flex-col relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-sky-400/10 rounded-bl-full"></div>
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2 relative z-10">
+                          <i className="fa-solid fa-robot text-sky-500"></i> AI Financial Advisor
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 relative z-10">Dapatkan evaluasi pintar berdasarkan pola pengeluaran bulan ini (Didukung oleh Google Gemini).</p>
+                        
+                        <div className="flex-1 flex flex-col">
+                          {aiInsightText ? (
+                            <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-sm p-4 rounded-2xl border border-white/40 dark:border-slate-700 flex-1 overflow-y-auto custom-scrollbar text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                              {aiInsightText}
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 py-8">
+                              <i className="fa-solid fa-brain text-4xl mb-3 text-sky-600"></i>
+                              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Menunggu Permintaan</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <button 
+                          onClick={handleGenerateAIInsight}
+                          disabled={isAiLoading}
+                          className="w-full mt-4 bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl flex justify-center items-center gap-2 transition-all shadow-lg shadow-sky-200 dark:shadow-none relative z-10"
+                        >
+                          {isAiLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
+                          {isAiLoading ? 'AI Sedang Berpikir...' : 'Minta Analisis AI'}
+                        </button>
+                      </div>
+
                     </div>
-                  </div>
-                </div>
+
+                    {/* Baris 3: Info Mini (Terboros, MoM, Ratio) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      
+                      {/* Month-over-Month (MoM) */}
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${smartInsights.isExpenseUp ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            <i className={`fa-solid ${smartInsights.isExpenseUp ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`}></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bulan Lalu</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Perubahan Pengeluaran</h3>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+                          {smartInsights.isExpenseUp ? '+' : '-'}{Math.abs(smartInsights.expenseChange).toFixed(1)}%
+                        </p>
+                        <p className={`text-xs font-medium ${smartInsights.isExpenseUp ? 'text-rose-500' : 'text-emerald-500'}`}>
+                          {smartInsights.isExpenseUp ? 'Anda lebih boros bulan ini.' : 'Bagus! Anda lebih hemat.'}
+                        </p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-amber-100 text-amber-500">
+                            <i className="fa-solid fa-fire-flame-curved"></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Terboros</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Kategori Menguras</h3>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white mb-1 truncate">{smartInsights.biggestCat || '-'}</p>
+                        <p className={`text-xs font-medium text-amber-600 ${privacyFilter}`}>Total: {formatRupiah(smartInsights.biggestCatAmount)}</p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-indigo-100 text-indigo-500">
+                            <i className="fa-solid fa-piggy-bank"></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rasio</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Tingkat Tabungan</h3>
+                        <p className={`text-2xl font-black text-slate-900 dark:text-white mb-1 ${privacyFilter}`}>{smartInsights.savingsRatio}%</p>
+                        <p className="text-xs font-medium text-indigo-500">Dari total pendapatan.</p>
+                      </div>
+
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
