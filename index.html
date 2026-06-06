@@ -349,6 +349,9 @@
 
       const privacyFilter = isPrivacyMode ? "blur-[6px] select-none opacity-70 pointer-events-none transition-all duration-300" : "transition-all duration-300";
 
+      // Mencegah Crash pada PDF Kuitansi
+      const currentUserName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Staff FinansialKu';
+
       const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
@@ -442,7 +445,7 @@
         return uniqueYears.sort((a, b) => b - a);
       }, [transactions]);
 
-      // Array transaksi Global bulan ini untuk Dashboard & Chart Donat
+      // Array transaksi bulan ini untuk Dashboard
       const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
           const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -460,7 +463,7 @@
         });
       }, [transactions, searchTerm, filterMonth, filterYear, filterWallet, events]);
 
-      // PERBAIKAN BUG MINUS: Pemasukan/Pengeluaran Sesuai Filter, tetapi Balance dari SEMUA transaksi
+      // Pemasukan/Pengeluaran Sesuai Filter
       const { totalIncome, totalExpense } = useMemo(() => {
         return filteredTransactions.reduce((acc, curr) => {
           const numAmount = parseFloat(curr.amount);
@@ -478,11 +481,10 @@
         }, 0);
       }, [transactions]);
 
+      // Saldo tiap dompet dari KESELURUHAN history
       const walletBalances = useMemo(() => {
         const balances = {};
         wallets.forEach(w => balances[w] = 0);
-        
-        // Kita hitung dari SELURUH transaksi, bukan yg terfilter bulan ini
         transactions.forEach(t => {
           const w = t.wallet || 'Dompet Utama';
           if (balances[w] === undefined) balances[w] = 0; 
@@ -762,7 +764,6 @@
         };
 
         if (editingTxId) {
-          // UPDATE MODE
           const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
           if (error) {
             showToast("Gagal memperbarui data!", "error");
@@ -772,13 +773,12 @@
             cancelEdit();
           }
         } else {
-          // CREATE MODE
           const { data, error } = await supabase.from('transactions').insert([txData]).select();
           if (error) {
             showToast("Gagal menyimpan data!", "error");
           } else if (data) {
             setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-            cancelEdit(); // Memanggil cancelEdit untuk reset state ke kondisi default
+            cancelEdit(); 
             showToast("Transaksi berhasil dicatat!");
             
             if (type === 'income' && numericAmount >= 100000) {
@@ -1150,7 +1150,6 @@
       const handlePrintInvoice = () => {
         const rawAmount = parseFloat(invoiceAmount.toString().replace(/\./g, '')) || 0;
         const spelledOut = rawAmount > 0 ? terbilang(rawAmount) + " Rupiah" : "Nol Rupiah";
-        const currentUserName = user?.user_metadata?.name || 'Staff FinansialKu';
 
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
@@ -2149,6 +2148,328 @@
                     <button onClick={handleCopySplitBill} className="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3.5 px-4 rounded-xl flex justify-center items-center gap-2 transition-colors shadow-lg shadow-fuchsia-200 dark:shadow-none">
                       <i className="fa-regular fa-copy"></i> Salin Teks ke WhatsApp
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================== TAB LAPORAN PINTAR (TERBARU) ===================== */}
+            {activeTab === 'insights' && (
+              <div className="animate-fade-in space-y-6">
+                {/* Header Section */}
+                <div className="bg-indigo-600 dark:bg-indigo-700 rounded-3xl p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="relative z-10 text-center md:text-left">
+                    <h2 className="text-3xl font-black mb-2 flex items-center justify-center md:justify-start gap-3">
+                      <i className="fa-solid fa-lightbulb text-indigo-300"></i> Laporan Pintar
+                    </h2>
+                    <p className="text-indigo-200 text-sm">Analisis otomatis untuk gaya finansial yang lebih sehat.</p>
+                  </div>
+                  
+                  {/* Selector Bulan & Tahun */}
+                  <div className="relative z-10 flex gap-3 w-full md:w-auto bg-indigo-800/40 p-2 rounded-xl backdrop-blur-sm">
+                    <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="flex-1 md:w-auto px-4 py-2.5 bg-white dark:bg-slate-800 border-none text-slate-900 dark:text-white rounded-lg font-bold text-sm cursor-pointer shadow-sm">
+                      <option value="all">Semua Bulan</option>
+                      {Array.from({length: 12}, (_, i) => { const m = String(i+1).padStart(2, '0'); return <option key={m} value={m}>{['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][i]}</option>; })}
+                    </select>
+                    <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="flex-1 md:w-auto px-4 py-2.5 bg-white dark:bg-slate-800 border-none text-slate-900 dark:text-white rounded-lg font-bold text-sm cursor-pointer shadow-sm">
+                      <option value="all">Semua Tahun</option>
+                      {availableYears.map(year => <option key={year} value={year}>{year}</option>)}
+                    </select>
+                  </div>
+                  <i className="fa-solid fa-chart-line text-9xl absolute -right-6 -top-6 text-white/5"></i>
+                </div>
+
+                {!smartInsights ? (
+                  <div className="text-center py-20 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl">
+                    <div className="bg-slate-100 dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i className="fa-solid fa-chart-simple text-slate-400 text-3xl"></i></div>
+                    <h4 className="text-slate-900 dark:text-white font-bold text-lg mb-1">Data Belum Cukup</h4>
+                    <p className="text-slate-500 text-sm">Catat lebih banyak transaksi bulan ini untuk memunculkan analisis AI.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Baris 1: Health Score & Safe to Spend */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* Financial Health Status */}
+                      <div className={`rounded-3xl p-6 border-2 flex items-center gap-6 ${smartInsights.healthColor}`}>
+                        <div className="text-5xl shrink-0 drop-shadow-sm"><i className={`fa-solid ${smartInsights.healthIcon}`}></i></div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Status Keuangan</p>
+                          <h3 className="text-2xl font-black mb-1">{smartInsights.healthStatus}</h3>
+                          <p className="text-sm font-medium opacity-90 leading-snug">{smartInsights.healthMessage}</p>
+                        </div>
+                      </div>
+
+                      {/* Safe to Spend Limit */}
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-center relative overflow-hidden group">
+                        <i className="fa-solid fa-basket-shopping absolute -right-4 -bottom-4 text-7xl text-slate-50 dark:text-slate-800 group-hover:scale-110 transition-transform duration-500"></i>
+                        <div className="relative z-10">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Batas Jajan Harian</h3>
+                            {smartInsights.daysLeft > 0 ? (
+                              <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-1 rounded-md">Sisa {smartInsights.daysLeft} Hari</span>
+                            ) : (
+                              <span className="bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-md">Pilih Bulan Berjalan</span>
+                            )}
+                          </div>
+                          
+                          {smartInsights.daysLeft > 0 ? (
+                            <>
+                              <p className={`text-4xl font-black text-slate-900 dark:text-white tracking-tight ${privacyFilter}`}>
+                                {smartInsights.safeToSpend > 0 ? formatRupiah(smartInsights.safeToSpend) : 'Rp 0'}
+                              </p>
+                              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Agar saldo bulan ini cukup sampai akhir bulan.</p>
+                            </>
+                          ) : (
+                            <p className="text-lg font-bold text-slate-400 mt-2">Batas harian hanya tersedia untuk bulan ini.</p>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Baris 2: Grafik Garis Arus Kas & Analisis AI */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      {/* Trend Cashflow */}
+                      <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                          <i className="fa-solid fa-chart-area text-indigo-500"></i> Tren Arus Kas Harian
+                        </h3>
+                        <CashflowLineChart transactions={filteredTransactions} filterMonth={filterMonth} filterYear={filterYear} isDarkMode={isDarkMode} />
+                      </div>
+
+                      {/* Asisten AI Gemini */}
+                      <div className="lg:col-span-1 bg-gradient-to-b from-sky-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800 rounded-3xl p-6 shadow-sm border border-sky-100 dark:border-slate-700 flex flex-col relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-sky-400/10 rounded-bl-full"></div>
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2 relative z-10">
+                          <i className="fa-solid fa-robot text-sky-500"></i> AI Financial Advisor
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 relative z-10">Dapatkan evaluasi pintar berdasarkan pola pengeluaran bulan ini (Didukung oleh Google Gemini).</p>
+                        
+                        <div className="flex-1 flex flex-col">
+                          {aiInsightText ? (
+                            <div className="bg-white/60 dark:bg-slate-900/50 backdrop-blur-sm p-4 rounded-2xl border border-white/40 dark:border-slate-700 flex-1 overflow-y-auto custom-scrollbar text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                              {aiInsightText}
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 py-8">
+                              <i className="fa-solid fa-brain text-4xl mb-3 text-sky-600"></i>
+                              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Menunggu Permintaan</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <button 
+                          onClick={handleGenerateAIInsight}
+                          disabled={isAiLoading}
+                          className="w-full mt-4 bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl flex justify-center items-center gap-2 transition-all shadow-lg shadow-sky-200 dark:shadow-none relative z-10"
+                        >
+                          {isAiLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
+                          {isAiLoading ? 'AI Sedang Berpikir...' : 'Minta Analisis AI'}
+                        </button>
+                      </div>
+
+                    </div>
+
+                    {/* Baris 3: Info Mini (Terboros, MoM, Ratio) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      
+                      {/* Month-over-Month (MoM) */}
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${smartInsights.isExpenseUp ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            <i className={`fa-solid ${smartInsights.isExpenseUp ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`}></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bulan Lalu</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Perubahan Pengeluaran</h3>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+                          {smartInsights.isExpenseUp ? '+' : '-'}{Math.abs(smartInsights.expenseChange).toFixed(1)}%
+                        </p>
+                        <p className={`text-xs font-medium ${smartInsights.isExpenseUp ? 'text-rose-500' : 'text-emerald-500'}`}>
+                          {smartInsights.isExpenseUp ? 'Anda lebih boros bulan ini.' : 'Bagus! Anda lebih hemat.'}
+                        </p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-amber-100 text-amber-500">
+                            <i className="fa-solid fa-fire-flame-curved"></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Terboros</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Kategori Menguras</h3>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white mb-1 truncate">{smartInsights.biggestCat || '-'}</p>
+                        <p className={`text-xs font-medium text-amber-600 ${privacyFilter}`}>Total: {formatRupiah(smartInsights.biggestCatAmount)}</p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-indigo-100 text-indigo-500">
+                            <i className="fa-solid fa-piggy-bank"></i>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rasio</span>
+                        </div>
+                        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">Tingkat Tabungan</h3>
+                        <p className={`text-2xl font-black text-slate-900 dark:text-white mb-1 ${privacyFilter}`}>{smartInsights.savingsRatio}%</p>
+                        <p className="text-xs font-medium text-indigo-500">Dari total pendapatan.</p>
+                      </div>
+
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ===================== TAB KUITANSI (PDF GENERATOR) ===================== */}
+            {activeTab === 'invoice' && (
+              <div className="animate-fade-in">
+                
+                {/* Judul Tab */}
+                <div className="bg-indigo-600 dark:bg-indigo-700 rounded-2xl p-8 text-white shadow-lg mb-8 relative overflow-hidden">
+                  <i className="fa-solid fa-file-invoice-dollar text-6xl text-indigo-400/30 absolute -right-2 -top-2"></i>
+                  <div className="relative z-10">
+                    <h2 className="text-3xl font-bold tracking-tight mb-2">Pembuat Kuitansi Digital</h2>
+                    <p className="text-indigo-200 text-sm">Hasilkan & simpan bukti transaksi legal berformat PDF secara instan.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                  
+                  {/* Formulir Pengisian Kuitansi */}
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm space-y-5">
+                    <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-4">
+                      <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><i className="fa-solid fa-pen-to-square text-indigo-600"></i> Atur Detail Kuitansi</h3>
+                      <button onClick={() => {
+                        const rand = Math.floor(100000 + Math.random() * 900000);
+                        setInvoiceNo(`INV/${new Date().getFullYear()}/${rand}`);
+                      }} className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold" title="Generate ulang nomor">
+                        <i className="fa-solid fa-rotate mr-1"></i> No Baru
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nomor Invoice</label>
+                        <input type="text" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="block w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tipe Transaksi</label>
+                        <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value)} className="block w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                          <option value="expense">Pengeluaran (Debet)</option>
+                          <option value="income">Pemasukan (Kredit)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        {invoiceType === 'income' ? 'Diterima Dari' : 'Dibayarkan Kepada'}
+                      </label>
+                      <input type="text" value={invoiceParty} onChange={(e) => setInvoiceParty(e.target.value)} placeholder="Contoh: Budi Santoso / PT Sukses Makmur" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nominal (Rp)</label>
+                        <input type="text" inputMode="numeric" value={invoiceAmount} onChange={(e) => setInvoiceAmount(formatInputNumber(e.target.value))} placeholder="Contoh: 150.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm font-semibold" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tanggal Cetak</label>
+                        <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Metode / Sumber Dana</label>
+                        <select value={invoiceWallet} onChange={(e) => setInvoiceWallet(e.target.value)} className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                          {wallets.map(w => <option key={w} value={w}>{w}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Keperluan Pembayaran</label>
+                        <input type="text" value={invoiceDesc} onChange={(e) => setInvoiceDesc(e.target.value)} placeholder="Contoh: Pembelian Laptop Kantor" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Catatan Tambahan (Kaki Kuitansi)</label>
+                      <textarea value={invoiceNote} onChange={(e) => setInvoiceNote(e.target.value)} rows="2" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm resize-none"></textarea>
+                    </div>
+
+                    <button onClick={handlePrintInvoice} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all">
+                      <i className="fa-solid fa-print"></i> Cetak & Ekspor PDF
+                    </button>
+                  </div>
+
+                  {/* REALTIME LIVE PREVIEW */}
+                  <div className={`space-y-4 ${privacyFilter}`}>
+                    <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Pratinjau Kuitansi (Live Preview)</h3>
+                    
+                    <div className="bg-white text-slate-800 border-2 border-slate-200/60 p-6 sm:p-8 rounded-2xl shadow-xl relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white to-slate-50 border-double border-4">
+                      
+                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-[linear-gradient(45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%),linear-gradient(-45deg,transparent_33.333%,#f1f5f9_33.333%,#f1f5f9_66.667%,transparent_66.667%)] bg-[length:12px_12px] opacity-10"></div>
+
+                      <div className="flex justify-between items-start border-b border-slate-200 pb-5 mb-5">
+                        <div>
+                          <span className="text-xs font-black tracking-widest text-indigo-600 uppercase flex items-center gap-1.5">
+                            <i className="fa-solid fa-wallet"></i> FinansialKu
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono block mt-0.5">E-RECEIPT SYSTEM</span>
+                        </div>
+                        <div className="text-right">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Kuitansi Pembayaran</h4>
+                          <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{invoiceNo || 'INV/XXXX'}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3.5 text-xs">
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">Tanggal:</span>
+                          <span className="font-semibold text-slate-700">{formatDate(invoiceDate)}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">
+                            {invoiceType === 'income' ? 'Diterima Dari:' : 'Dibayarkan Kepada:'}
+                          </span>
+                          <span className="font-bold text-slate-900">{invoiceParty || '-'}</span>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-slate-400 font-medium block">Uang Sejumlah:</span>
+                          <span className="font-semibold text-slate-700 italic bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/60 block text-[11px] leading-relaxed text-center">
+                            *** {invoiceAmount ? terbilang(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Nol'} Rupiah ***
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-slate-100 pb-2">
+                          <span className="text-slate-400 font-medium">Untuk Keperluan:</span>
+                          <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">{invoiceDesc || '-'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-center mt-10 pt-6 border-t-2 border-slate-200 gap-6">
+                        <div className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2">
+                          <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Total</span>
+                          <span className="text-lg font-black tracking-tight">
+                            {invoiceAmount ? formatRupiah(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Rp 0'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-center relative select-none">
+                          <div className="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
+                            LUNAS
+                          </div>
+                          <div className="w-24">
+                            <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Metode Dana</span>
+                            <span className="font-bold text-slate-700 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{invoiceWallet}</span>
+                          </div>
+                          <div className="w-24">
+                            <span className="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
+                            <span className="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">{currentUserName}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
