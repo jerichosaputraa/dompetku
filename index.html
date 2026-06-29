@@ -985,7 +985,7 @@
         if (!file) return;
 
         setIsScanning(true);
-        showToast("AI sedang membaca struk... Mohon tunggu.", "info");
+        showToast("AI sedang menganalisis gambar... Mohon tunggu.", "info");
 
         try {
           const reader = new FileReader();
@@ -994,14 +994,15 @@
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = ""; // API Key disuntik oleh Canvas
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const apiKey = ""; 
+            // Menggunakan Gemini 3 Flash untuk kemampuan vision yang lebih mutakhir
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this receipt. Return ONLY a valid JSON object. Extract the total amount (integer), description (string, merchant name or what was bought), and date (string in YYYY-MM-DD format, or leave empty if not found). Do not include markdown or backticks." },
+                  { text: "Analyze this image (it could be a receipt or a bank statement/mutasi rekening). Find the most prominent or most recent single transaction. Determine if it is an expense (debit/DB/keluar) or income (credit/CR/masuk). Return ONLY a valid JSON object. Do not include markdown." },
                   { inlineData: { mimeType, data: base64Data } }
                 ]
               }],
@@ -1012,13 +1013,15 @@
                   properties: {
                     amount: { type: "INTEGER" },
                     description: { type: "STRING" },
-                    date: { type: "STRING" }
+                    date: { type: "STRING" },
+                    transaction_type: { type: "STRING", description: "Must be exactly 'expense' or 'income'" }
                   }
                 }
               }
             };
 
-            const fetchWithRetry = async (retries = 5, delay = 1000) => {
+            // Mengurangi retry agar tidak stuck terlalu lama jika gagal
+            const fetchWithRetry = async (retries = 2, delay = 1000) => {
               try {
                 const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -1036,36 +1039,33 @@
               const result = JSON.parse(text);
               if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
               if (result.description) setDescription(result.description);
-              if (result.date) setDate(result.date);
-              setType('expense'); 
-              showToast("Struk berhasil dipindai! Silakan cek formulir.");
+              
+              if (result.date && !isNaN(new Date(result.date).getTime())) {
+                 setDate(result.date.substring(0, 10)); // Memastikan format YYYY-MM-DD
+              }
+              
+              // Otomatis memilih tab Pemasukan / Pengeluaran berdasarkan deteksi mutasi bank
+              if (result.transaction_type === 'income') {
+                 setType('income');
+                 setCategory((categories?.income || defaultCategories.income)[0]);
+              } else {
+                 setType('expense');
+                 setCategory((categories?.expense || defaultCategories.expense)[0]);
+              }
+              
+              showToast("Data berhasil dipindai! Silakan cek formulir.");
             } else { throw new Error("Gagal mengekstrak teks."); }
           };
-        } catch (error) { console.error(error); showToast("Gagal memindai struk. Coba lagi.", "error"); } finally { setIsScanning(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+        } catch (error) { 
+          console.error(error); 
+          showToast("Gagal memindai gambar. Pastikan koneksi stabil & gambar jelas.", "error"); 
+        } finally { 
+          setIsScanning(false); 
+          if (fileInputRef.current) fileInputRef.current.value = ''; 
+        }
       };
 
-      // --- RENDER SCREEN LOGIN ---
-      if (!isLoggedIn) {
-        return (
-          <div className="min-h-screen flex items-center justify-center p-4">
-            {toast && (
-              <div className={`fixed top-4 right-4 sm:top-8 sm:right-8 p-4 rounded-xl shadow-lg text-white z-50 animate-fade-in-up flex items-center gap-3 ${toast.type === 'error' ? 'bg-rose-600' : toast.type === 'info' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-                <i className={`fa-solid ${toast.type === 'error' ? 'fa-circle-xmark' : toast.type === 'info' ? 'fa-circle-info' : 'fa-circle-check'} text-xl`}></i>
-                <p className="font-medium text-sm">{toast.message}</p>
-              </div>
-            )}
-            <div className="bg-white dark:bg-slate-800 max-w-md w-full rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden relative transition-colors">
-              <div className="bg-indigo-600 dark:bg-indigo-700 p-8 pt-12 text-center text-white">
-                <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm"><i className="fa-solid fa-wallet text-3xl"></i></div>
-                <h1 className="text-2xl font-bold tracking-tight">FinansialKu</h1>
-                <p className="text-indigo-200 mt-2 text-sm">Masuk untuk mencatat keuangan Anda</p>
-              </div>
-              <div className="p-8">
-                <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl mb-6">
-                  <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'login' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Masuk</button>
-                  <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${authMode === 'register' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-300'}`}>Daftar</button>
-                </div>
-                <form onSubmit={handleAuth} className="space-y-4">
+      const rawInvoiceAmt = parseFloat(invoiceAmount.toString().replace(/\./g, '')) || 0;
                   {authMode === 'register' && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nama Lengkap</label>
