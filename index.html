@@ -980,87 +980,87 @@
         }
       };
 
-      const handleScanReceipt = async (e) => {
+      const handleScanReceipt = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setIsScanning(true);
-        showToast("AI sedang menganalisis gambar... Mohon tunggu.", "info");
+        showToast("AI sedang menganalisis gambar... Mohon tunggu maksimal 15 detik.", "info");
 
-        try {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = async () => {
+        const reader = new FileReader();
+        
+        reader.onload = async () => {
+          try {
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = ""; 
-            // Memastikan menggunakan model image vision yang didukung untuk menghindari stuck error!
+            const apiKey = ""; // API Key disuntik oleh Canvas
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this image (it could be a receipt or a bank statement/mutasi rekening). Find the most prominent or most recent single transaction. Determine if it is an expense (debit/DB/keluar) or income (credit/CR/masuk). Return ONLY a valid JSON object. Do not include markdown." },
+                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a raw JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
                   { inlineData: { mimeType, data: base64Data } }
                 ]
-              }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: "OBJECT",
-                  properties: {
-                    amount: { type: "INTEGER" },
-                    description: { type: "STRING" },
-                    date: { type: "STRING" },
-                    transaction_type: { type: "STRING", description: "Must be exactly 'expense' or 'income'" }
-                  }
-                }
-              }
+              }]
             };
 
-            const fetchWithRetry = async (retries = 2, delay = 1000) => {
+            const fetchWithRetry = async (retries = 5, delay = 1000) => {
               try {
                 const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 return await res.json();
               } catch (error) {
-                if (retries > 0) { await new Promise(resolve => setTimeout(resolve, delay)); return fetchWithRetry(retries - 1, delay * 2); }
+                if (retries > 0) { 
+                  await new Promise(resolve => setTimeout(resolve, delay)); 
+                  return fetchWithRetry(retries - 1, delay * 2); 
+                }
                 throw error;
               }
             };
 
             const data = await fetchWithRetry();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
-            if (text) {
-              const result = JSON.parse(text);
-              if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
-              if (result.description) setDescription(result.description);
-              
-              if (result.date && !isNaN(new Date(result.date).getTime())) {
-                 setDate(result.date.substring(0, 10)); 
-              }
-              
-              if (result.transaction_type === 'income') {
-                 setType('income');
-                 setCategory((categories?.income || defaultCategories.income)[0]);
-              } else {
-                 setType('expense');
-                 setCategory((categories?.expense || defaultCategories.expense)[0]);
-              }
-              
-              showToast("Data berhasil dipindai! Silakan cek formulir.");
-            } else { throw new Error("Gagal mengekstrak teks."); }
-          };
-        } catch (error) { 
-          console.error(error); 
-          showToast("Gagal memindai gambar. Pastikan koneksi stabil & gambar jelas.", "error"); 
-        } finally { 
-          setIsScanning(false); 
-          if (fileInputRef.current) fileInputRef.current.value = ''; 
-        }
+            if (!text) throw new Error("Gagal mengekstrak data dari AI.");
+            
+            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const result = JSON.parse(text);
+            
+            if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
+            if (result.description) setDescription(result.description);
+            
+            if (result.date && !isNaN(new Date(result.date).getTime())) {
+               setDate(result.date.substring(0, 10)); 
+            }
+            
+            if (result.transaction_type === 'income') {
+               setType('income');
+               setCategory((categories?.income || defaultCategories.income)[0]);
+            } else {
+               setType('expense');
+               setCategory((categories?.expense || defaultCategories.expense)[0]);
+            }
+            
+            showToast("Data berhasil dipindai! Silakan cek formulir.", "success");
+          } catch (error) { 
+            console.error(error); 
+            showToast("Gagal memproses gambar. Format tidak dikenali atau koneksi terputus.", "error"); 
+          } finally { 
+            setIsScanning(false); 
+            if (fileInputRef.current) fileInputRef.current.value = ''; 
+          }
+        };
+
+        reader.onerror = () => {
+          showToast("Gagal membaca file gambar lokal.", "error");
+          setIsScanning(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        };
+
+        reader.readAsDataURL(file);
       };
 
       // --- RENDER SCREEN LOGIN ---
