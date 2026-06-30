@@ -943,8 +943,14 @@
         setAiInsightText('');
         
         try {
-          const apiKey = ""; // Disuntik otomatis oleh Canvas
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+          // --- MASUKKAN API KEY UNTUK FITUR LAPORAN PINTAR ---
+          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; 
+          
+          if (!apiKey || apiKey === "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw" || apiKey === "") {
+             throw new Error("API Key Gemini belum diisi di dalam kode!");
+          }
+
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
           const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
           Pemasukan: Rp ${smartInsights.cmIncome}
@@ -974,49 +980,70 @@
           }
         } catch (error) {
           console.error(error);
-          setAiInsightText("Maaf, Asisten AI sedang mengalami gangguan koneksi. Secara singkat: Pastikan pengeluaran tidak melebihi pemasukan, dan prioritaskan mengurangi budget pada kategori terboros Anda bulan ini.");
+          setAiInsightText("Maaf, Asisten AI gagal merespons. Pastikan koneksi stabil dan API Key sudah diisi di dalam kode (Cari 'AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw').");
         } finally {
           setIsAiLoading(false);
         }
       };
 
-      const handleScanReceipt = (e) => {
+      const handleScanReceipt = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setIsScanning(true);
-        showToast("AI sedang menganalisis gambar... Mohon tunggu maksimal 15 detik.", "info");
+        showToast("AI sedang membaca struk/mutasi... Mohon tunggu.", "info");
 
-        const reader = new FileReader();
-        
-        reader.onload = async () => {
-          try {
+        try {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = async () => {
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = ""; // API Key disuntik oleh Canvas
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            // --- MASUKKAN API KEY UNTUK FITUR SCAN FOTO ---
+            // HAPUS TULISAN INI DAN PASTE KEY DARI GOOGLE AI STUDIO DI ANTARA TANDA KUTIP
+            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; 
+            
+            if (!apiKey || apiKey === "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw" || apiKey === "") {
+               setIsScanning(false);
+               showToast("Gagal! API Key Gemini belum diisi di dalam kode (Baris handleScanReceipt).", "error");
+               if (fileInputRef.current) fileInputRef.current.value = '';
+               return;
+            }
 
+            // Memakai model Gemini 1.5 Flash yang sangat stabil untuk membaca Gambar mutasi
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            // Prompt sudah dioptimalkan khusus untuk membaca pola mutasi BCA (DB = Keluar, CR = Masuk)
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a raw JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
+                  { text: "Analyze this Indonesian bank statement (like BCA/myBCA) or receipt. Read the most prominent or first top transaction. Extract details. IF the text contains 'DB' or 'DEBIT', transaction_type is 'expense'. IF it contains 'CR' or 'KREDIT', transaction_type is 'income'. Return ONLY a JSON object. Exclude any markdown like ```json. Schema format needed: {\"amount\": 150000, \"description\": \"TRSF E-BANKING...\", \"date\": \"2024-06-29\", \"transaction_type\": \"expense\"}" },
                   { inlineData: { mimeType, data: base64Data } }
                 ]
-              }]
+              }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "OBJECT",
+                  properties: {
+                    amount: { type: "INTEGER" },
+                    description: { type: "STRING" },
+                    date: { type: "STRING" },
+                    transaction_type: { type: "STRING" }
+                  }
+                }
+              }
             };
 
-            const fetchWithRetry = async (retries = 5, delay = 1000) => {
+            const fetchWithRetry = async (retries = 3, delay = 1000) => {
               try {
                 const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 return await res.json();
               } catch (error) {
-                if (retries > 0) { 
-                  await new Promise(resolve => setTimeout(resolve, delay)); 
-                  return fetchWithRetry(retries - 1, delay * 2); 
-                }
+                if (retries > 0) { await new Promise(resolve => setTimeout(resolve, delay)); return fetchWithRetry(retries - 1, delay * 2); }
                 throw error;
               }
             };
@@ -1024,43 +1051,33 @@
             const data = await fetchWithRetry();
             let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
-            if (!text) throw new Error("Gagal mengekstrak data dari AI.");
-            
-            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-            const result = JSON.parse(text);
-            
-            if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
-            if (result.description) setDescription(result.description);
-            
-            if (result.date && !isNaN(new Date(result.date).getTime())) {
-               setDate(result.date.substring(0, 10)); 
-            }
-            
-            if (result.transaction_type === 'income') {
-               setType('income');
-               setCategory((categories?.income || defaultCategories.income)[0]);
-            } else {
-               setType('expense');
-               setCategory((categories?.expense || defaultCategories.expense)[0]);
-            }
-            
-            showToast("Data berhasil dipindai! Silakan cek formulir.", "success");
-          } catch (error) { 
-            console.error(error); 
-            showToast("Gagal memproses gambar. Format tidak dikenali atau koneksi terputus.", "error"); 
-          } finally { 
-            setIsScanning(false); 
-            if (fileInputRef.current) fileInputRef.current.value = ''; 
-          }
-        };
-
-        reader.onerror = () => {
-          showToast("Gagal membaca file gambar lokal.", "error");
-          setIsScanning(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        };
-
-        reader.readAsDataURL(file);
+            if (text) {
+              text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+              const result = JSON.parse(text);
+              
+              if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
+              if (result.description) setDescription(result.description);
+              if (result.date) setDate(result.date.substring(0, 10));
+              
+              // Cek tipe: income / expense otomatis
+              if (result.transaction_type === 'income') {
+                 setType('income');
+                 setCategory((categories?.income || defaultCategories.income)[0]);
+              } else {
+                 setType('expense');
+                 setCategory((categories?.expense || defaultCategories.expense)[0]);
+              }
+              
+              showToast("Sukses! Data Mutasi/Struk berhasil dipindai.");
+            } else { throw new Error("Gagal mengekstrak teks."); }
+          };
+        } catch (error) { 
+          console.error(error); 
+          showToast("Gagal memindai struk. Coba lagi.", "error"); 
+        } finally { 
+          setIsScanning(false); 
+          if (fileInputRef.current) fileInputRef.current.value = ''; 
+        }
       };
 
       // --- RENDER SCREEN LOGIN ---
