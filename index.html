@@ -173,7 +173,7 @@
               {
                 label: 'Pemasukan',
                 data: incomeData,
-                borderColor: '#10b981', // emerald-500
+                borderColor: '#10b981', 
                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
                 borderWidth: 2,
                 fill: true,
@@ -182,7 +182,7 @@
               {
                 label: 'Pengeluaran',
                 data: expenseData,
-                borderColor: '#f43f5e', // rose-500
+                borderColor: '#f43f5e', 
                 backgroundColor: 'rgba(244, 63, 94, 0.1)',
                 borderWidth: 2,
                 fill: true,
@@ -220,7 +220,6 @@
       const [user, setUser] = useState(null);
       const [isLoading, setIsLoading] = useState(false);
 
-      // Routing tab internal (Kuitansi Dihapus)
       const [activeTab, setActiveTab] = useState(() => {
         const hash = window.location.hash.replace('#', '');
         const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings', 'more'];
@@ -241,7 +240,7 @@
         };
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
-      }, []);
+      }, [activeTab]);
 
       const changeTab = (tabName) => {
         if (tabName !== activeTab) {
@@ -932,38 +931,19 @@
         if (!err2) {
           setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
           if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-      const emergencyFund = useMemo(() => {
-        if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
-        const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
-        let monthlyExpensesMap = {};
-        expenses.forEach(t => {
-            if(!t.date) return;
-            const monthKey = t.date.substring(0, 7); 
-            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount || 0);
-        });
-        const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
-        let totalAllExpenses = 0;
-        Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
-        let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
-        
-        let globalBalance = transactions.reduce((acc, curr) => {
-            return curr.type === 'income' ? acc + parseFloat(curr.amount || 0) : acc - parseFloat(curr.amount || 0);
-        }, 0);
-        
-        let globalTotalFunds = globalBalance + totalSavingsCollected;
-        let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
+          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
+        }
+        setIsLoading(false);
+      };
 
-        return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
-      }, [transactions, totalSavingsCollected]);
-
-      // --- LOGIKA AI FINANCIAL ADVISOR ---
+      // --- LOGIKA AI (Laporan Pintar & Scan Mutasi/Receipt) ---
       const handleGenerateAIInsight = async () => {
         if (!smartInsights) return;
         setIsAiLoading(true);
         setAiInsightText('');
         
         try {
-          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; // API Key dimasukkan
+          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw";
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
           const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
@@ -1000,43 +980,31 @@
         }
       };
 
-      const handleScanReceipt = async (e) => {
+      const handleScanReceipt = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setIsScanning(true);
-        showToast("AI sedang membaca struk/mutasi... Mohon tunggu.", "info");
+        showToast("AI sedang menganalisis gambar mutasi/struk... Mohon tunggu maksimal 15 detik.", "info");
 
-        try {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = async () => {
+        const reader = new FileReader();
+        
+        reader.onload = async () => {
+          try {
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; // API Key dimasukkan
+            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw";
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this receipt or Indonesian bank mutation screenshot (like BCA/myBCA). Find the most prominent single transaction. Return ONLY a valid JSON object without any markdown formatting. Use this exact schema: {\"amount\": 150000, \"description\": \"Merchant Name/Transaction Details\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Rules: If the image text shows 'DB', 'DEBIT', or 'KELUAR', set transaction_type to 'expense'. If it shows 'CR', 'KREDIT', or 'MASUK', set it to 'income'." },
+                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a raw JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
                   { inlineData: { mimeType, data: base64Data } }
                 ]
-              }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: "OBJECT",
-                  properties: {
-                    amount: { type: "INTEGER" },
-                    description: { type: "STRING" },
-                    date: { type: "STRING" },
-                    transaction_type: { type: "STRING" }
-                  }
-                }
-              }
+              }]
             };
 
             const fetchWithRetry = async (retries = 3, delay = 1000) => {
@@ -1045,7 +1013,10 @@
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                 return await res.json();
               } catch (error) {
-                if (retries > 0) { await new Promise(resolve => setTimeout(resolve, delay)); return fetchWithRetry(retries - 1, delay * 2); }
+                if (retries > 0) { 
+                  await new Promise(resolve => setTimeout(resolve, delay)); 
+                  return fetchWithRetry(retries - 1, delay * 2); 
+                }
                 throw error;
               }
             };
@@ -1053,31 +1024,43 @@
             const data = await fetchWithRetry();
             let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
-            if (text) {
-              text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-              const result = JSON.parse(text);
-              if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
-              if (result.description) setDescription(result.description);
-              if (result.date) setDate(result.date.substring(0, 10));
-              
-              if (result.transaction_type === 'income') {
-                 setType('income');
-                 setCategory((categories?.income || defaultCategories.income)[0]);
-              } else {
-                 setType('expense');
-                 setCategory((categories?.expense || defaultCategories.expense)[0]);
-              }
-              
-              showToast("Struk/Mutasi berhasil dipindai! Silakan cek formulir.");
-            } else { throw new Error("Gagal mengekstrak teks."); }
-          };
-        } catch (error) { 
-          console.error(error); 
-          showToast("Gagal memindai struk. Coba lagi.", "error"); 
-        } finally { 
-          setIsScanning(false); 
-          if (fileInputRef.current) fileInputRef.current.value = ''; 
-        }
+            if (!text) throw new Error("Gagal mengekstrak data dari AI.");
+            
+            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const result = JSON.parse(text);
+            
+            if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
+            if (result.description) setDescription(result.description);
+            
+            if (result.date && !isNaN(new Date(result.date).getTime())) {
+               setDate(result.date.substring(0, 10)); 
+            }
+            
+            if (result.transaction_type === 'income') {
+               setType('income');
+               setCategory((categories?.income || defaultCategories.income)[0]);
+            } else {
+               setType('expense');
+               setCategory((categories?.expense || defaultCategories.expense)[0]);
+            }
+            
+            showToast("Data berhasil dipindai! Silakan cek formulir.", "success");
+          } catch (error) { 
+            console.error(error); 
+            showToast("Gagal memproses gambar. Format tidak dikenali atau koneksi terputus.", "error"); 
+          } finally { 
+            setIsScanning(false); 
+            if (fileInputRef.current) fileInputRef.current.value = ''; 
+          }
+        };
+
+        reader.onerror = () => {
+          showToast("Gagal membaca file gambar.", "error");
+          setIsScanning(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        };
+
+        reader.readAsDataURL(file);
       };
 
       // --- RENDER SCREEN LOGIN ---
@@ -1339,7 +1322,7 @@
                             onClick={() => fileInputRef.current?.click()}
                             className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
                             disabled={isScanning}
-                            title="Otomatis isi form dari foto struk"
+                            title="Otomatis isi form dari mutasi bank"
                           >
                             {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
                             {isScanning ? 'Membaca...' : 'Scan AI'}
@@ -2221,7 +2204,7 @@
                     <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-lightbulb"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Laporan Pintar</span>
                   </button>
-                  <button onClick={() => changeTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
+                  <button onClick={() => changeTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
                     <div className="w-14 h-14 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-gear"></i></div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Pengaturan</span>
                   </button>
