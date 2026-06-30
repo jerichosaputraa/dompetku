@@ -932,24 +932,38 @@
         if (!err2) {
           setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
           if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
-        }
-        setIsLoading(false);
-      };
+      const emergencyFund = useMemo(() => {
+        if (transactions.length === 0) return { avgMonthlyExpense: 0, survivalMonths: 0, globalTotalFunds: 0 };
+        const expenses = transactions.filter(t => t.type === 'expense' && t.category !== 'Tabungan');
+        let monthlyExpensesMap = {};
+        expenses.forEach(t => {
+            if(!t.date) return;
+            const monthKey = t.date.substring(0, 7); 
+            monthlyExpensesMap[monthKey] = (monthlyExpensesMap[monthKey] || 0) + parseFloat(t.amount || 0);
+        });
+        const activeMonthsCount = Object.keys(monthlyExpensesMap).length;
+        let totalAllExpenses = 0;
+        Object.values(monthlyExpensesMap).forEach(amt => totalAllExpenses += amt);
+        let avgMonthlyExpense = activeMonthsCount > 0 ? totalAllExpenses / activeMonthsCount : 0;
+        
+        let globalBalance = transactions.reduce((acc, curr) => {
+            return curr.type === 'income' ? acc + parseFloat(curr.amount || 0) : acc - parseFloat(curr.amount || 0);
+        }, 0);
+        
+        let globalTotalFunds = globalBalance + totalSavingsCollected;
+        let survivalMonths = avgMonthlyExpense > 0 ? (globalTotalFunds / avgMonthlyExpense).toFixed(1) : 0;
 
+        return { avgMonthlyExpense, survivalMonths, globalTotalFunds };
+      }, [transactions, totalSavingsCollected]);
+
+      // --- LOGIKA AI FINANCIAL ADVISOR ---
       const handleGenerateAIInsight = async () => {
         if (!smartInsights) return;
         setIsAiLoading(true);
         setAiInsightText('');
         
         try {
-          // --- MASUKKAN API KEY UNTUK FITUR LAPORAN PINTAR ---
-          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; 
-          
-          if (!apiKey || apiKey === "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw" || apiKey === "") {
-             throw new Error("API Key Gemini belum diisi di dalam kode!");
-          }
-
+          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; // API Key dimasukkan
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
           const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
@@ -980,7 +994,7 @@
           }
         } catch (error) {
           console.error(error);
-          setAiInsightText("Maaf, Asisten AI gagal merespons. Pastikan koneksi stabil dan API Key sudah diisi di dalam kode (Cari 'AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw').");
+          setAiInsightText("Maaf, Asisten AI sedang mengalami gangguan koneksi. Secara singkat: Pastikan pengeluaran tidak melebihi pemasukan, dan prioritaskan mengurangi budget pada kategori terboros Anda bulan ini.");
         } finally {
           setIsAiLoading(false);
         }
@@ -1000,26 +1014,14 @@
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            // --- MASUKKAN API KEY UNTUK FITUR SCAN FOTO ---
-            // HAPUS TULISAN INI DAN PASTE KEY DARI GOOGLE AI STUDIO DI ANTARA TANDA KUTIP
-            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; 
-            
-            if (!apiKey || apiKey === "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw" || apiKey === "") {
-               setIsScanning(false);
-               showToast("Gagal! API Key Gemini belum diisi di dalam kode (Baris handleScanReceipt).", "error");
-               if (fileInputRef.current) fileInputRef.current.value = '';
-               return;
-            }
-
-            // Memakai model Gemini 1.5 Flash yang sangat stabil untuk membaca Gambar mutasi
+            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw"; // API Key dimasukkan
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-            // Prompt sudah dioptimalkan khusus untuk membaca pola mutasi BCA (DB = Keluar, CR = Masuk)
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this Indonesian bank statement (like BCA/myBCA) or receipt. Read the most prominent or first top transaction. Extract details. IF the text contains 'DB' or 'DEBIT', transaction_type is 'expense'. IF it contains 'CR' or 'KREDIT', transaction_type is 'income'. Return ONLY a JSON object. Exclude any markdown like ```json. Schema format needed: {\"amount\": 150000, \"description\": \"TRSF E-BANKING...\", \"date\": \"2024-06-29\", \"transaction_type\": \"expense\"}" },
+                  { text: "Analyze this receipt or Indonesian bank mutation screenshot (like BCA/myBCA). Find the most prominent single transaction. Return ONLY a valid JSON object without any markdown formatting. Use this exact schema: {\"amount\": 150000, \"description\": \"Merchant Name/Transaction Details\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Rules: If the image text shows 'DB', 'DEBIT', or 'KELUAR', set transaction_type to 'expense'. If it shows 'CR', 'KREDIT', or 'MASUK', set it to 'income'." },
                   { inlineData: { mimeType, data: base64Data } }
                 ]
               }],
@@ -1054,12 +1056,10 @@
             if (text) {
               text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
               const result = JSON.parse(text);
-              
               if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
               if (result.description) setDescription(result.description);
               if (result.date) setDate(result.date.substring(0, 10));
               
-              // Cek tipe: income / expense otomatis
               if (result.transaction_type === 'income') {
                  setType('income');
                  setCategory((categories?.income || defaultCategories.income)[0]);
@@ -1068,7 +1068,7 @@
                  setCategory((categories?.expense || defaultCategories.expense)[0]);
               }
               
-              showToast("Sukses! Data Mutasi/Struk berhasil dipindai.");
+              showToast("Struk/Mutasi berhasil dipindai! Silakan cek formulir.");
             } else { throw new Error("Gagal mengekstrak teks."); }
           };
         } catch (error) { 
