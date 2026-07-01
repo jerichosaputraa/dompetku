@@ -269,8 +269,7 @@
       const [filterMonth, setFilterMonth] = useState(currentSysMonth);
       const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
-
-      // State Tabungan
+      // Tabungan
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
@@ -278,14 +277,15 @@
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
       const [topUpAmount, setTopUpAmount] = useState('');
 
-      // State Cicilan
+      // Cicilan
       const [installments, setInstallments] = useState([]);
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
       const [instTenor, setInstTenor] = useState('');
+      const [instPaidMonths, setInstPaidMonths] = useState('');
       const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
 
-      // State Acara & Trip
+      // Acara
       const [events, setEvents] = useState([]);
       const [newEventName, setNewEventName] = useState('');
       const [newEventBudget, setNewEventBudget] = useState('');
@@ -948,11 +948,17 @@
         e.preventDefault();
         const numericTotal = parseFloat(instTotalAmount.toString().replace(/\./g, ''));
         const numericTenor = parseInt(instTenor);
+        const numericPaidMonths = parseInt(instPaidMonths) || 0;
         if (!instName || !numericTotal || !numericTenor) return;
         setIsLoading(true);
-        const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: 0, tenor_months: numericTenor, user_email: user.email };
+        
+        // Kalkulasi berapa uang yang dianggap "sudah lunas di awal" tanpa potong saldo
+        const monthlyRec = Math.ceil(numericTotal / numericTenor);
+        const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
+
+        const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: initialPaidAmount, tenor_months: numericTenor, user_email: user.email };
         const { data, error } = await supabase.from('installments').insert([newInst]).select();
-        if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } else if (data) { setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); showToast("Cicilan baru berhasil dicatat!"); }
+        if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } else if (data) { setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); setInstPaidMonths(''); showToast("Cicilan baru berhasil dicatat!"); }
         setIsLoading(false);
       };
 
@@ -1705,14 +1711,24 @@
                           <input type="text" inputMode="numeric" value={instTotalAmount} onChange={(e) => setInstTotalAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Termasuk biaya admin/bunga" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tenor (Bulan)</label>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tenor Total (Bulan)</label>
                           <input type="number" value={instTenor} onChange={(e) => setInstTenor(e.target.value)} required min="1" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: 12" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sudah Berjalan (Bulan) - Opsional</label>
+                          <input type="number" value={instPaidMonths} onChange={(e) => setInstPaidMonths(e.target.value)} min="0" max={instTenor || ""} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500" placeholder="Cth: 4" />
                         </div>
                         
                         {instTotalAmount && instTenor && parseInt(instTenor) > 0 && (
                           <div className="bg-violet-50 dark:bg-violet-900/30 p-3 rounded-xl border border-violet-100 dark:border-violet-800">
                             <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Estimasi Cicilan per Bulan:</p>
                             <p className={`font-bold text-violet-700 dark:text-violet-300 ${privacyFilter}`}>{formatRupiah(Math.ceil(parseFloat(instTotalAmount.toString().replace(/\./g, '')) / parseInt(instTenor)))}</p>
+                            {parseInt(instPaidMonths) > 0 && (
+                              <p className="text-xs text-violet-600 dark:text-violet-400 font-medium mt-1">
+                                <i className="fa-solid fa-info-circle mr-1"></i>
+                                Status awal: {instPaidMonths} bulan sudah dianggap lunas (tanpa memotong saldo).
+                              </p>
+                            )}
                           </div>
                         )}
 
