@@ -943,8 +943,8 @@
         setAiInsightText('');
         
         try {
-          const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw";
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+          const apiKey = ""; // Harus dibiarkan kosong! Canvas yang menyuntikkan kuncinya
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
           const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
           Pemasukan: Rp ${smartInsights.cmIncome}
@@ -985,7 +985,7 @@
         if (!file) return;
 
         setIsScanning(true);
-        showToast("AI sedang menganalisis gambar mutasi/struk... Mohon tunggu maksimal 15 detik.", "info");
+        showToast("AI sedang menganalisis gambar mutasi/struk... Mohon tunggu.", "info");
 
         const reader = new FileReader();
         
@@ -994,20 +994,32 @@
             const base64Data = reader.result.split(',')[1];
             const mimeType = file.type;
 
-            const apiKey = "AQ.Ab8RN6Ld7upfeHqaIeLRAUEkc-hbEQPQTd6xkQKtkCO0_0ikcw";
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const apiKey = ""; // Kunci otomatis akan disuntikkan oleh sistem Canvas
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             const payload = {
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a raw JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
-                  { inlineData: { mimeType, data: base64Data } }
+                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a valid JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
+                  { inlineData: { mimeType: mimeType, data: base64Data } }
                 ]
-              }]
+              }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "OBJECT",
+                  properties: {
+                    amount: { type: "INTEGER" },
+                    description: { type: "STRING" },
+                    date: { type: "STRING" },
+                    transaction_type: { type: "STRING", description: "Must be 'expense' or 'income'" }
+                  }
+                }
+              }
             };
 
-            const fetchWithRetry = async (retries = 3, delay = 1000) => {
+            const fetchWithRetry = async (retries = 5, delay = 1000) => {
               try {
                 const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -1022,11 +1034,10 @@
             };
 
             const data = await fetchWithRetry();
-            let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
             if (!text) throw new Error("Gagal mengekstrak data dari AI.");
             
-            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
             const result = JSON.parse(text);
             
             if (result.amount) setAmount(formatInputNumber(result.amount.toString()));
@@ -1044,10 +1055,10 @@
                setCategory((categories?.expense || defaultCategories.expense)[0]);
             }
             
-            showToast("Data berhasil dipindai! Silakan cek formulir.", "success");
+            showToast("Data mutasi berhasil dipindai! Silakan cek formulir.", "success");
           } catch (error) { 
             console.error(error); 
-            showToast("Gagal memproses gambar. Format tidak dikenali atau koneksi terputus.", "error"); 
+            showToast("Gagal memproses gambar. Pastikan koneksi stabil.", "error"); 
           } finally { 
             setIsScanning(false); 
             if (fileInputRef.current) fileInputRef.current.value = ''; 
