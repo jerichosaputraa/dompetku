@@ -60,6 +60,21 @@
       return `${year}-${month}-${day}`;
     };
 
+    // Fungsi Pengurutan Presisi (Tanggal + Waktu)
+    const sortTransactionsHelper = (txs) => {
+      return [...txs].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA === dateB) {
+          // Jika di tanggal yang sama, urutkan berdasarkan waktu buat (terbaru di atas)
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+          return timeB - timeA;
+        }
+        return dateB - dateA;
+      });
+    };
+
     const terbilang = (nilai) => {
       const bilangan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
       let temp = "";
@@ -373,7 +388,8 @@
         const fetchData = async () => {
           setIsLoading(true);
           try {
-            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+            // Ditambahkan .order('created_at', { ascending: false }) agar pengambilan dari database otomatis urut
+            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false }).order('created_at', { ascending: false });
             if (txRes.data) setTransactions(txRes.data);
             
             const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
@@ -406,7 +422,7 @@
       }, [transactions]);
 
       const filteredTransactions = useMemo(() => {
-        return transactions.filter(t => {
+        const result = transactions.filter(t => {
           const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                 t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 (events.find(e => e.id === t.event_id)?.event_name || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -420,6 +436,8 @@
           
           return matchesSearch && matchesMonth && matchesYear && matchesWallet;
         });
+        // Pastikan hasil saringan di UI diurutkan secara presisi
+        return sortTransactionsHelper(result);
       }, [transactions, searchTerm, filterMonth, filterYear, filterWallet, events]);
 
       const { totalIncome, totalExpense } = useMemo(() => {
@@ -927,7 +945,7 @@
           
           if (!err2) {
             setInstallments(installments.map(i => i.id === inst.id ? { ...i, paid_amount: newPaidAmount } : i));
-            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
             showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(finalPayVal.toString())}!`);
           } else {
@@ -963,14 +981,14 @@
           if (editingTxId) {
             const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
             if (error) { showToast("Gagal memperbarui data!", "error"); } else {
-              setTransactions(prev => prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t).sort((a,b) => new Date(b.date) - new Date(a.date)));
+              setTransactions(prev => sortTransactionsHelper(prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t)));
               showToast("Transaksi berhasil diperbarui!"); cancelEdit();
             }
           } else {
             const { data, error } = await supabase.from('transactions').insert([txData]).select();
             if (error) { showToast("Gagal menyimpan data!", "error"); } 
             else if (data && data.length > 0) {
-              setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); 
+              setTransactions(prev => sortTransactionsHelper([data[0], ...prev])); 
               cancelEdit(); showToast("Transaksi berhasil dicatat!");
               if (type === 'income' && numericAmount >= 100000) setIncomeSplitter({ isOpen: true, amount: numericAmount });
             } else {
@@ -1059,7 +1077,7 @@
           const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
           if (!err2) {
             setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setTopUpModal({ isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0] }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
           } else {
             showToast("Nabung gagal dicatat ke riwayat.", "error");
@@ -1095,7 +1113,7 @@
           
           if (!err2) {
             setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setWithdrawModal({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0] }); 
             setWithdrawAmount(''); 
             showToast(`Berhasil mencairkan Rp ${formatInputNumber(withdrawVal.toString())} ke ${withdrawModal.wallet}!`);
