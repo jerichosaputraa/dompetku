@@ -254,17 +254,21 @@
       const [filterMonth, setFilterMonth] = useState(currentSysMonth);
       const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
-      // Tabungan
+
+      // State Tabungan
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
+      const [goalInitialAmount, setGoalInitialAmount] = useState(''); // Fitur "Sudah Terkumpul"
       const [goalDeadline, setGoalDeadline] = useState('');
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '', wallet: defaultWallets[0] });
       const [topUpAmount, setTopUpAmount] = useState('');
+      
+      // Fitur Penarikan Tabungan
       const [withdrawModal, setWithdrawModal] = useState({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: defaultWallets[0] });
       const [withdrawAmount, setWithdrawAmount] = useState('');
 
-      // Cicilan
+      // State Cicilan
       const [installments, setInstallments] = useState([]);
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
@@ -992,7 +996,38 @@
         setIsLoading(false);
       };
 
-      const handleAuth = async (e) => {
+      const handleGenerateAIInsight = async () => {
+        if (!smartInsights) return;
+        setIsAiLoading(true);
+        setAiInsightText('');
+        
+        try {
+          const apiKey = ""; 
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+          const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
+          Pemasukan: Rp ${smartInsights.cmIncome}
+          Pengeluaran: Rp ${smartInsights.cmExpense}
+          Kategori Paling Boros: ${smartInsights.biggestCat} (Rp ${smartInsights.biggestCatAmount})
+          Uang yang ditabung: ${smartInsights.savingsRatio}% dari pemasukan.
+          Sisa saldo bulan ini: Rp ${smartInsights.cmIncome - smartInsights.cmExpense}
+          Gunakan bahasa Indonesia yang ramah, profesional, dan berikan tips nyata yang *actionable*. Format dalam bentuk paragraf biasa tanpa markdown aneh-aneh.`;
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }]
+            })
+          });
+
+          if (!response.ok) throw new Error("Gagal mengambil data dari AI.");
+          
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (text) {
+            setAiInsightText(text);
           } else {
             throw new Error("Respon AI kosong.");
           }
@@ -1025,7 +1060,7 @@
               contents: [{
                 role: "user",
                 parts: [
-                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a valid JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk/PEND, and 'expense' if it is Debit/DB/Keluar." },
+                  { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a valid JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk, and 'expense' if it is Debit/DB/Keluar." },
                   { inlineData: { mimeType: mimeType, data: base64Data } }
                 ]
               }]
@@ -1378,7 +1413,7 @@
                             onClick={() => fileInputRef.current?.click()}
                             className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
                             disabled={isScanning}
-                            title="Otomatis isi form dari foto struk"
+                            title="Otomatis isi form dari mutasi bank"
                           >
                             {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
                             {isScanning ? 'Membaca...' : 'Scan AI'}
@@ -1524,7 +1559,7 @@
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sudah Terkumpul (Opsional)</label>
                           <input type="text" inputMode="numeric" value={goalInitialAmount} onChange={(e) => setGoalInitialAmount(formatInputNumber(e.target.value))} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 5.000.000" />
-                          <p className="text-[10px] text-slate-500 mt-1.5">Nominal ini dianggap sebagai saldo awal dan <strong className="text-emerald-600 dark:text-emerald-400">TIDAK</strong> akan memotong saldo dompet Anda.</p>
+                          <p className="text-[10px] text-slate-500 mt-1.5">Nominal ini dianggap sebagai saldo awal dan <strong className="text-emerald-600 dark:text-emerald-400">TIDAK</strong> memotong saldo dompet Anda.</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
@@ -1561,6 +1596,7 @@
                               <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
                             </div>
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
+                            
                             <div className="flex gap-2">
                               <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
                               {current > 0 && (
