@@ -254,17 +254,17 @@
       const [filterMonth, setFilterMonth] = useState(currentSysMonth);
       const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
-
-      // State Tabungan
+      // Tabungan
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
       const [goalDeadline, setGoalDeadline] = useState('');
-      const [goalInitialAmount, setGoalInitialAmount] = useState(''); // NEW STATE
-      const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
+      const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '', wallet: defaultWallets[0] });
       const [topUpAmount, setTopUpAmount] = useState('');
+      const [withdrawModal, setWithdrawModal] = useState({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: defaultWallets[0] });
+      const [withdrawAmount, setWithdrawAmount] = useState('');
 
-      // State Cicilan
+      // Cicilan
       const [installments, setInstallments] = useState([]);
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
@@ -950,49 +950,49 @@
         const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
         if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal memindahkan uang ke tabungan.", "error"); setIsLoading(false); return; }
         const txDate = getLocalDateString();
-        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: wallets[0], user_email: user.email };
+        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: topUpModal.wallet, user_email: user.email };
         const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
         if (!err2) {
           setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
           if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '' }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
+          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0] }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
         }
         setIsLoading(false);
       };
 
-      // --- LOGIKA AI (Laporan Pintar & Scan Mutasi/Receipt) ---
-      const handleGenerateAIInsight = async () => {
-        if (!smartInsights) return;
-        setIsAiLoading(true);
-        setAiInsightText('');
+      const handleWithdrawSubmit = async (e) => {
+        e.preventDefault();
+        const withdrawVal = parseFloat(withdrawAmount.toString().replace(/\./g, ''));
+        if (!withdrawVal || withdrawVal <= 0) return;
+        setIsLoading(true);
+        const goal = savingsGoals.find(g => g.id === withdrawModal.goalId);
         
-        try {
-          const apiKey = ""; 
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        if (withdrawVal > parseFloat(goal.current_amount)) {
+           showToast("Nominal tarik melebihi saldo tabungan!", "error");
+           setIsLoading(false);
+           return;
+        }
 
-          const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
-          Pemasukan: Rp ${smartInsights.cmIncome}
-          Pengeluaran: Rp ${smartInsights.cmExpense}
-          Kategori Paling Boros: ${smartInsights.biggestCat} (Rp ${smartInsights.biggestCatAmount})
-          Uang yang ditabung: ${smartInsights.savingsRatio}% dari pemasukan.
-          Sisa saldo bulan ini: Rp ${smartInsights.cmIncome - smartInsights.cmExpense}
-          Gunakan bahasa Indonesia yang ramah, profesional, dan berikan tips nyata yang *actionable*. Format dalam bentuk paragraf biasa tanpa markdown aneh-aneh.`;
+        const newCurrent = parseFloat(goal.current_amount || 0) - withdrawVal;
+        
+        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
+        if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal menarik uang dari tabungan.", "error"); setIsLoading(false); return; }
+        
+        const txDate = getLocalDateString();
+        const newTx = { type: 'income', amount: withdrawVal, description: `Pencairan: ${goal.title}`, category: 'Lainnya', date: txDate, wallet: withdrawModal.wallet, user_email: user.email };
+        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+        
+        if (!err2) {
+          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
+          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+          setWithdrawModal({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0] }); 
+          setWithdrawAmount(''); 
+          showToast(`Berhasil mencairkan Rp ${formatInputNumber(withdrawVal.toString())} ke ${withdrawModal.wallet}!`);
+        }
+        setIsLoading(false);
+      };
 
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }]
-            })
-          });
-
-          if (!response.ok) throw new Error("Gagal mengambil data dari AI.");
-          
-          const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          
-          if (text) {
-            setAiInsightText(text);
+      const handleAuth = async (e) => {
           } else {
             throw new Error("Respon AI kosong.");
           }
@@ -1240,15 +1240,47 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan saldo dari dompet utama ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan saldo dari dompet Anda ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
                 <form onSubmit={handleTopUpSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
                     <input type="text" inputMode="numeric" value={topUpAmount} onChange={(e) => setTopUpAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" placeholder="Contoh: 100.000" />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sumber Dana / Dompet</label>
+                    <select value={topUpModal.wallet} onChange={(e) => setTopUpModal({...topUpModal, wallet: e.target.value})} required className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                      {(wallets || defaultWallets).map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </div>
                   <div className="flex gap-3 mt-8">
-                    <button type="button" onClick={() => setTopUpModal({isOpen: false})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
+                    <button type="button" onClick={() => setTopUpModal({isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0]})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
                     <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Uang'}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Tarik Tabungan */}
+          {withdrawModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up border-t-4 border-emerald-500">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Tarik Tabungan</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Cairkan saldo dari <strong className="text-emerald-600 dark:text-emerald-400">{withdrawModal.goalTitle}</strong> ke dompet Anda.</p>
+                <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal Tarik (Rp)</label>
+                    <input type="text" inputMode="numeric" value={withdrawAmount} onChange={(e) => setWithdrawAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder={`Maks: ${formatInputNumber(withdrawModal.maxAmount.toString())}`} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Pilih Tujuan Dana</label>
+                    <select value={withdrawModal.wallet} onChange={(e) => setWithdrawModal({...withdrawModal, wallet: e.target.value})} required className="block w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm">
+                      {(wallets || defaultWallets).map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-3 mt-8">
+                    <button type="button" onClick={() => setWithdrawModal({isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0]})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Tarik Dana'}</button>
                   </div>
                 </form>
               </div>
@@ -1529,10 +1561,14 @@
                               <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
                             </div>
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
-                            {isCompleted ? (
-                              <div className="w-full py-2.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-sm text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
-                            ) : (
-                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title})} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                            <div className="flex gap-2">
+                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                              {current > 0 && (
+                                <button onClick={() => setWithdrawModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, maxAmount: current, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-700 dark:text-slate-200 hover:text-rose-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-hand-holding-dollar"></i> Tarik</button>
+                              )}
+                            </div>
+                            {isCompleted && (
+                              <div className="w-full mt-3 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl font-bold text-xs text-center"><i className="fa-solid fa-check-circle mr-1.5"></i> Target Tercapai!</div>
                             )}
                           </div>
                         )
