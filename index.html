@@ -60,6 +60,21 @@
       return `${year}-${month}-${day}`;
     };
 
+    const terbilang = (nilai) => {
+      const bilangan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
+      let temp = "";
+      if (nilai < 12) { temp = " " + bilangan[nilai]; }
+      else if (nilai < 20) { temp = terbilang(nilai - 10) + " Belas"; }
+      else if (nilai < 100) { temp = terbilang(Math.floor(nilai / 10)) + " Puluh" + terbilang(nilai % 10); }
+      else if (nilai < 200) { temp = " Seratus" + terbilang(nilai - 100); }
+      else if (nilai < 1000) { temp = terbilang(Math.floor(nilai / 100)) + " Ratus" + terbilang(nilai % 100); }
+      else if (nilai < 2000) { temp = " Seribu" + terbilang(nilai - 1000); }
+      else if (nilai < 1000000) { temp = terbilang(Math.floor(nilai / 1000)) + " Ribu" + terbilang(nilai % 1000); }
+      else if (nilai < 1000000000) { temp = terbilang(Math.floor(nilai / 1000000)) + " Juta" + terbilang(nilai % 1000000); }
+      else if (nilai < 1000000000000) { temp = terbilang(Math.floor(nilai / 1000000000)) + " Milyar" + terbilang(parseFloat(nilai % 1000000000)); }
+      return temp.trim();
+    };
+
     const defaultCategories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
       expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Cicilan', 'Lainnya']
@@ -225,7 +240,8 @@
 
       const [activeTab, setActiveTab] = useState(() => {
         const hash = window.location.hash.replace('#', '');
-        const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings', 'more'];
+        // Daftar valid tab (Dihapus tab 'more' karena UI baru di HP)
+        const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings'];
         return validTabs.includes(hash) ? hash : 'dashboard';
       });
 
@@ -273,7 +289,7 @@
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
       const [instTenor, setInstTenor] = useState('');
-      const [instPaidMonths, setInstPaidMonths] = useState('');
+      const [instPaidMonths, setInstPaidMonths] = useState(''); // Fitur "Sudah Berjalan"
       const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
 
       // State Acara & Trip
@@ -559,13 +575,6 @@
       const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
-      };
-
-      const changeTab = (tabName) => {
-        if (tabName !== activeTab) {
-          window.history.pushState({ tab: tabName }, '', `#${tabName}`);
-          setActiveTab(tabName);
-        }
       };
 
       const loadCustomData = (email) => {
@@ -1275,7 +1284,7 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
               <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan saldo dari dompet Anda ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan uang dari dompet ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
                 <form onSubmit={handleTopUpSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
@@ -1380,6 +1389,29 @@
                   </div>
                 </div>
 
+                {/* ===================== FITUR PINTAR (QUICK MENU GRID - MOBILE OPTIMIZED) ===================== */}
+                <div className="mb-8">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 ml-1">Menu Utama</h3>
+                  <div className="grid grid-cols-4 gap-3 sm:gap-6">
+                    <button onClick={() => changeTab('installments')} className="bg-white dark:bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:bg-violet-50 dark:hover:bg-slate-700/50 transition-all active:scale-95">
+                      <div className="w-12 h-12 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl flex items-center justify-center text-xl shadow-inner"><i className="fa-solid fa-credit-card"></i></div>
+                      <span className="font-bold text-[10px] sm:text-sm text-slate-700 dark:text-slate-300">Cicilan</span>
+                    </button>
+                    <button onClick={() => changeTab('events')} className="bg-white dark:bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:bg-indigo-50 dark:hover:bg-slate-700/50 transition-all active:scale-95">
+                      <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center text-xl shadow-inner"><i className="fa-solid fa-calendar-star"></i></div>
+                      <span className="font-bold text-[10px] sm:text-sm text-slate-700 dark:text-slate-300">Acara</span>
+                    </button>
+                    <button onClick={() => changeTab('trips')} className="bg-white dark:bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:bg-cyan-50 dark:hover:bg-slate-700/50 transition-all active:scale-95">
+                      <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 rounded-2xl flex items-center justify-center text-xl shadow-inner"><i className="fa-solid fa-plane-departure"></i></div>
+                      <span className="font-bold text-[10px] sm:text-sm text-slate-700 dark:text-slate-300">Trip</span>
+                    </button>
+                    <button onClick={() => changeTab('splitbill')} className="bg-white dark:bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:bg-fuchsia-50 dark:hover:bg-slate-700/50 transition-all active:scale-95">
+                      <div className="w-12 h-12 bg-fuchsia-100 dark:bg-fuchsia-900/40 text-fuchsia-600 dark:text-fuchsia-400 rounded-2xl flex items-center justify-center text-xl shadow-inner"><i className="fa-solid fa-users-viewfinder"></i></div>
+                      <span className="font-bold text-[10px] sm:text-sm text-slate-700 dark:text-slate-300 whitespace-nowrap">Split Bill</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
                     <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2"><div className="bg-emerald-100 dark:bg-emerald-900/40 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400"><i className="fa-solid fa-arrow-trend-down"></i></div><h2 className="font-medium">Pemasukan (Sesuai Filter)</h2></div>
@@ -1411,9 +1443,9 @@
                           <button 
                             type="button" 
                             onClick={() => fileInputRef.current?.click()}
-                            className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+                            className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition-colors flex items-center gap-1.5"
                             disabled={isScanning}
-                            title="Otomatis isi form dari mutasi bank"
+                            title="Otomatis isi form dari foto struk"
                           >
                             {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
                             {isScanning ? 'Membaca...' : 'Scan AI'}
@@ -1468,7 +1500,7 @@
                               Batal
                             </button>
                           )}
-                          <button type="submit" disabled={isLoading || isScanning} className={`${editingTxId ? 'w-2/3' : 'w-full'} bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors`}>
+                          <button type="submit" disabled={isLoading || isScanning} className={`${editingTxId ? 'w-2/3' : 'w-full'} bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none`}>
                             {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : (editingTxId ? 'Perbarui Transaksi' : 'Simpan Transaksi')}
                           </button>
                         </div>
@@ -1535,6 +1567,9 @@
             {/* ===================== TAB TABUNGAN ===================== */}
             {activeTab === 'savings' && (
               <div className="animate-fade-in">
+                <button onClick={() => changeTab('dashboard')} className="md:hidden flex items-center text-slate-500 dark:text-slate-400 hover:text-indigo-600 mb-4 transition-colors font-bold text-sm">
+                   <i className="fa-solid fa-arrow-left mr-2"></i> Kembali
+                </button>
                 <div className="bg-emerald-600 dark:bg-emerald-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                   <div className="relative z-10">
                     <p className="text-emerald-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Tabungan Terkumpul</p>
@@ -1598,7 +1633,7 @@
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
                             
                             <div className="flex gap-2">
-                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
+                              <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-plus"></i> Isi</button>
                               {current > 0 && (
                                 <button onClick={() => setWithdrawModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, maxAmount: current, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-700 dark:text-slate-200 hover:text-rose-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-hand-holding-dollar"></i> Tarik</button>
                               )}
@@ -1618,6 +1653,9 @@
             {/* ===================== TAB CICILAN & PAYLATER ===================== */}
             {activeTab === 'installments' && (
               <div className="animate-fade-in">
+                <button onClick={() => changeTab('dashboard')} className="md:hidden flex items-center text-slate-500 dark:text-slate-400 hover:text-indigo-600 mb-4 transition-colors font-bold text-sm">
+                   <i className="fa-solid fa-arrow-left mr-2"></i> Kembali
+                </button>
                 <div className="bg-violet-600 dark:bg-violet-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                   <div className="relative z-10">
                     <p className="text-violet-100 font-medium mb-2 uppercase tracking-widest text-sm">Total Hutang Aktif</p>
@@ -1733,6 +1771,9 @@
             {/* ===================== TAB ACARA KHUSUS ===================== */}
             {activeTab === 'events' && (
               <div className="animate-fade-in space-y-8">
+                <button onClick={() => changeTab('dashboard')} className="md:hidden flex items-center text-slate-500 dark:text-slate-400 hover:text-indigo-600 mb-4 transition-colors font-bold text-sm">
+                   <i className="fa-solid fa-arrow-left mr-2"></i> Kembali
+                </button>
                 <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
                    <div className="relative z-10">
                      <h2 className="text-3xl font-black mb-2">Mode Anggaran Acara</h2>
@@ -1820,6 +1861,9 @@
             {/* --- TAB: PERJALANAN (TRIP PLANNER) --- */}
             {activeTab === 'trips' && (
               <div className="animate-fade-in space-y-8">
+                <button onClick={() => changeTab('dashboard')} className="md:hidden flex items-center text-slate-500 dark:text-slate-400 hover:text-indigo-600 mb-4 transition-colors font-bold text-sm">
+                   <i className="fa-solid fa-arrow-left mr-2"></i> Kembali
+                </button>
                 <div className="bg-gradient-to-r from-cyan-600 to-blue-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
                    <div className="relative z-10">
                      <h2 className="text-3xl font-black mb-2">Perencana Perjalanan (Trip Planner)</h2>
@@ -1924,6 +1968,9 @@
             {/* --- TAB: PATUNGAN (SPLIT BILL) --- */}
             {activeTab === 'splitbill' && (
               <div className="animate-fade-in space-y-8">
+                <button onClick={() => changeTab('dashboard')} className="md:hidden flex items-center text-slate-500 dark:text-slate-400 hover:text-indigo-600 mb-4 transition-colors font-bold text-sm">
+                   <i className="fa-solid fa-arrow-left mr-2"></i> Kembali
+                </button>
                 <div className="bg-fuchsia-600 dark:bg-fuchsia-700 rounded-2xl p-8 text-white shadow-lg mb-8 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative overflow-hidden">
                    <div className="relative z-10">
                      <h2 className="text-3xl font-black mb-2">Kalkulator Patungan (Split Bill)</h2>
@@ -2291,62 +2338,26 @@
               </div>
             )}
 
-            {/* ===================== TAB MENU LAINNYA (MOBILE ONLY) ===================== */}
-            {activeTab === 'more' && (
-              <div className="animate-fade-in space-y-8 md:hidden">
-                <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                   <div className="relative z-10">
-                     <h2 className="text-3xl font-black mb-2">Menu Lainnya</h2>
-                     <p className="text-slate-300 text-sm">Jelajahi seluruh fitur FinansialKu</p>
-                   </div>
-                   <i className="fa-solid fa-shapes text-8xl absolute -right-4 -bottom-4 text-white/5"></i>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => changeTab('installments')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-credit-card"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Cicilan</span>
-                  </button>
-                  <button onClick={() => changeTab('events')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-calendar-star"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Acara Khusus</span>
-                  </button>
-                  <button onClick={() => changeTab('insights')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-lightbulb"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Laporan Pintar</span>
-                  </button>
-                  <button onClick={() => changeTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
-                    <div className="w-14 h-14 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-gear"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Pengaturan</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
           </main>
 
-          {/* MOBILE BOTTOM NAVIGATION */}
+          {/* MOBILE BOTTOM NAVIGATION - UX BARU YANG LEBIH BAIK */}
           {isLoggedIn && (
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-2 z-50 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-1 z-50 pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.05)]">
               <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-house text-xl mb-1"></i>
+                <div className={`text-xl mb-1 ${activeTab === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-900/30 px-4 py-1 rounded-full' : ''}`}><i className="fa-solid fa-house"></i></div>
                 <span className="text-[10px] font-bold">Beranda</span>
               </button>
               <button onClick={() => changeTab('savings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-piggy-bank text-xl mb-1"></i>
+                <div className={`text-xl mb-1 ${activeTab === 'savings' ? 'bg-emerald-50 dark:bg-emerald-900/30 px-4 py-1 rounded-full' : ''}`}><i className="fa-solid fa-piggy-bank"></i></div>
                 <span className="text-[10px] font-bold">Tabungan</span>
               </button>
-              <button onClick={() => changeTab('trips')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'trips' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-plane-departure text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Trip</span>
+              <button onClick={() => changeTab('insights')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'insights' ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <div className={`text-xl mb-1 ${activeTab === 'insights' ? 'bg-sky-50 dark:bg-sky-900/30 px-4 py-1 rounded-full' : ''}`}><i className="fa-solid fa-lightbulb"></i></div>
+                <span className="text-[10px] font-bold">Laporan</span>
               </button>
-              <button onClick={() => changeTab('splitbill')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'splitbill' ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-users-viewfinder text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Split</span>
-              </button>
-              <button onClick={() => changeTab('more')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'more' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-grip text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Lainnya</span>
+              <button onClick={() => changeTab('settings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'settings' ? 'text-slate-800 dark:text-white' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                <div className={`text-xl mb-1 ${activeTab === 'settings' ? 'bg-slate-100 dark:bg-slate-700 px-4 py-1 rounded-full' : ''}`}><i className="fa-solid fa-gear"></i></div>
+                <span className="text-[10px] font-bold">Pengaturan</span>
               </button>
             </nav>
           )}
