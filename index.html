@@ -60,21 +60,6 @@
       return `${year}-${month}-${day}`;
     };
 
-    const terbilang = (nilai) => {
-      const bilangan = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas"];
-      let temp = "";
-      if (nilai < 12) { temp = " " + bilangan[nilai]; }
-      else if (nilai < 20) { temp = terbilang(nilai - 10) + " Belas"; }
-      else if (nilai < 100) { temp = terbilang(Math.floor(nilai / 10)) + " Puluh" + terbilang(nilai % 10); }
-      else if (nilai < 200) { temp = " Seratus" + terbilang(nilai - 100); }
-      else if (nilai < 1000) { temp = terbilang(Math.floor(nilai / 100)) + " Ratus" + terbilang(nilai % 100); }
-      else if (nilai < 2000) { temp = " Seribu" + terbilang(nilai - 1000); }
-      else if (nilai < 1000000) { temp = terbilang(Math.floor(nilai / 1000)) + " Ribu" + terbilang(nilai % 1000); }
-      else if (nilai < 1000000000) { temp = terbilang(Math.floor(nilai / 1000000)) + " Juta" + terbilang(nilai % 1000000); }
-      else if (nilai < 1000000000000) { temp = terbilang(Math.floor(nilai / 1000000000)) + " Milyar" + terbilang(parseFloat(nilai % 1000000000)); }
-      return temp.trim();
-    };
-
     const defaultCategories = {
       income: ['Gaji', 'Sampingan', 'Bonus', 'Investasi', 'Lainnya'],
       expense: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan', 'Hiburan', 'Kesehatan', 'Tabungan', 'Cicilan', 'Lainnya']
@@ -226,7 +211,7 @@
     }
 
     // ============================================================================
-    // KOMPONEN UTAMA (APP) - STRUKTUR YANG BENAR UNTUK MENGHINDARI REFERENCE ERROR
+    // KOMPONEN UTAMA (APP)
     // ============================================================================
     function App() {
       // 1. Deklarasi Semua State Terlebih Dahulu
@@ -240,7 +225,7 @@
 
       const [activeTab, setActiveTab] = useState(() => {
         const hash = window.location.hash.replace('#', '');
-        const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'invoice', 'settings', 'more'];
+        const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings', 'more'];
         return validTabs.includes(hash) ? hash : 'dashboard';
       });
 
@@ -269,15 +254,17 @@
       const [filterMonth, setFilterMonth] = useState(currentSysMonth);
       const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
-      // Tabungan
+
+      // State Tabungan
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
       const [goalDeadline, setGoalDeadline] = useState('');
+      const [goalInitialAmount, setGoalInitialAmount] = useState(''); // NEW STATE
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '' });
       const [topUpAmount, setTopUpAmount] = useState('');
 
-      // Cicilan
+      // State Cicilan
       const [installments, setInstallments] = useState([]);
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
@@ -285,7 +272,7 @@
       const [instPaidMonths, setInstPaidMonths] = useState('');
       const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
 
-      // Acara
+      // State Acara & Trip
       const [events, setEvents] = useState([]);
       const [newEventName, setNewEventName] = useState('');
       const [newEventBudget, setNewEventBudget] = useState('');
@@ -301,19 +288,11 @@
       const [splitGrandTotal, setSplitGrandTotal] = useState('');
       const [splitPersons, setSplitPersons] = useState([{ id: 1, name: 'Saya', amount: '' }, { id: 2, name: 'Teman 1', amount: '' }]);
 
-      // State Pengaturan & Kuitansi
+      // State Pengaturan
       const [profileName, setProfileName] = useState('');
       const [newCategoryName, setNewCategoryName] = useState('');
       const [newCategoryType, setNewCategoryType] = useState('expense');
       const [newWalletName, setNewWalletName] = useState('');
-      const [invoiceNo, setInvoiceNo] = useState('');
-      const [invoiceType, setInvoiceType] = useState('expense'); 
-      const [invoiceParty, setInvoiceParty] = useState(''); 
-      const [invoiceAmount, setInvoiceAmount] = useState('');
-      const [invoiceDesc, setInvoiceDesc] = useState('');
-      const [invoiceDate, setInvoiceDate] = useState(getLocalDateString());
-      const [invoiceWallet, setInvoiceWallet] = useState(defaultWallets[0]);
-      const [invoiceNote, setInvoiceNote] = useState('Kuitansi ini sah dihasilkan secara digital melalui sistem FinansialKu.');
 
       // State AI & Scan
       const [isScanning, setIsScanning] = useState(false);
@@ -328,13 +307,7 @@
 
       // 2. Deklarasi useEffect
       useEffect(() => { localStorage.setItem('privacyMode', isPrivacyMode); }, [isPrivacyMode]);
-      useEffect(() => {
-        if (!invoiceNo) {
-          const rand = Math.floor(100000 + Math.random() * 900000);
-          setInvoiceNo(`INV/${new Date().getFullYear()}/${rand}`);
-        }
-      }, [activeTab]);
-
+      
       useEffect(() => {
         if (isDarkMode) { document.documentElement.classList.add('dark'); localStorage.setItem('darkMode', 'true'); } 
         else { document.documentElement.classList.remove('dark'); localStorage.setItem('darkMode', 'false'); }
@@ -577,9 +550,6 @@
         });
       }, [splitTotals, splitPersons]);
 
-      // 4. Deklarasi Konstanta untuk View (seperti Kuitansi Spelled Out)
-      const rawInvoiceAmt = parseFloat(invoiceAmount.toString().replace(/\./g, '')) || 0;
-      const invoiceSpelledOut = rawInvoiceAmt > 0 ? terbilang(rawInvoiceAmt) + " Rupiah" : "Nol Rupiah";
 
       // 5. Fungsi Handlers
       const showToast = (message, type = 'success') => {
@@ -610,10 +580,10 @@
           if (savedWallets) {
             const parsedW = JSON.parse(savedWallets);
             if(Array.isArray(parsedW) && parsedW.length > 0) {
-              setWallets(parsedW); setSelectedWallet(parsedW[0]); setInvoiceWallet(parsedW[0]); setInstPayModal(prev => ({...prev, wallet: parsedW[0]}));
-            } else { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); setInvoiceWallet(defaultWallets[0]); }
-          } else { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); setInvoiceWallet(defaultWallets[0]); setInstPayModal(prev => ({...prev, wallet: defaultWallets[0]})); }
-        } catch(e) { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); setInvoiceWallet(defaultWallets[0]); }
+              setWallets(parsedW); setSelectedWallet(parsedW[0]); setInstPayModal(prev => ({...prev, wallet: parsedW[0]}));
+            } else { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); }
+          } else { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); setInstPayModal(prev => ({...prev, wallet: defaultWallets[0]})); }
+        } catch(e) { setWallets(defaultWallets); setSelectedWallet(defaultWallets[0]); }
       };
 
       const saveCustomCategories = (newCats) => {
@@ -780,115 +750,6 @@
         showToast("Jadwal (.ics) berhasil diunduh! Buka file untuk sinkronisasi.");
       };
 
-      const handleLoadToInvoice = (t) => {
-        setInvoiceType(t.type);
-        setInvoiceAmount(formatInputNumber(t.amount.toString()));
-        setInvoiceDesc(t.description);
-        setInvoiceDate(t.date);
-        setInvoiceWallet(t.wallet || 'Dompet Utama');
-        setInvoiceParty(t.type === 'income' ? 'Diterima Dari: Pengirim Dana' : 'Dibayarkan Kepada: Penerima Dana');
-        changeTab('invoice');
-        showToast("Data transaksi berhasil dimuat ke kuitansi!");
-      };
-
-      const handlePrintInvoice = () => {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Kuitansi ${invoiceNo}</title>
-              <script src="https://cdn.tailwindcss.com"><\/script>
-              <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-              <style>
-                @media print {
-                  body { background: white; color: black; }
-                  .no-print { display: none; }
-                }
-              </style>
-            </head>
-            <body class="bg-white text-slate-800 p-8 flex justify-center items-center min-h-screen">
-              <div class="max-w-4xl w-full border-4 border-double border-slate-400 p-8 rounded-3xl relative bg-white">
-                
-                <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-slate-200 to-transparent"></div>
-
-                <div class="flex justify-between items-start border-b-2 border-slate-200 pb-6 mb-6">
-                  <div>
-                    <h1 class="text-3xl font-extrabold tracking-tight text-indigo-700 uppercase flex items-center gap-2">
-                      <i class="fa-solid fa-wallet"></i> FinansialKu
-                    </h1>
-                    <p class="text-xs text-slate-500 mt-1 font-mono">Digital Receipt Platform</p>
-                  </div>
-                  <div class="text-right">
-                    <h2 class="text-xl font-bold text-slate-800 uppercase tracking-widest">Kuitansi Pembayaran</h2>
-                    <p class="text-sm font-mono text-slate-500 mt-1">No: ${invoiceNo}</p>
-                  </div>
-                </div>
-
-                <div class="space-y-4 text-sm">
-                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
-                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Tanggal</span>
-                    <span class="col-span-3 font-semibold">${formatDate(invoiceDate)}</span>
-                  </div>
-
-                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
-                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">
-                      ${invoiceType === 'income' ? 'Diterima Dari' : 'Dibayarkan Kepada'}
-                    </span>
-                    <span class="col-span-3 font-bold text-slate-900 text-lg">${invoiceParty || '-'}</span>
-                  </div>
-
-                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
-                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Uang Sejumlah</span>
-                    <span class="col-span-3 font-medium text-slate-700 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 block">
-                      *** ${invoiceSpelledOut} ***
-                    </span>
-                  </div>
-
-                  <div class="grid grid-cols-4 border-b border-slate-100 pb-3">
-                    <span class="font-bold text-slate-500 uppercase tracking-wider text-xs">Untuk Keperluan</span>
-                    <span class="col-span-3 font-semibold text-slate-800">${invoiceDesc || '-'}</span>
-                  </div>
-                </div>
-
-                <div class="flex flex-col sm:flex-row justify-between items-center mt-10 pt-6 border-t-2 border-slate-200 gap-6">
-                  <div class="bg-indigo-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2">
-                    <span class="text-[9px] font-bold uppercase tracking-wider opacity-80">Total</span>
-                    <span class="text-lg font-black tracking-tight">
-                      ${invoiceAmount ? formatRupiah(parseFloat(invoiceAmount.replace(/\./g, ''))) : 'Rp 0'}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-4 text-center relative select-none">
-                    <div class="absolute -left-12 -top-6 border-4 border-emerald-500/80 text-emerald-500 font-black tracking-widest text-[11px] px-3 py-1 rounded-lg rotate-[-12deg] bg-white/60">
-                      LUNAS
-                    </div>
-                    <div class="w-24">
-                      <span class="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Metode Dana</span>
-                      <span class="font-bold text-slate-700 text-[10px] border-b border-slate-300 pb-0.5 block truncate">${invoiceWallet}</span>
-                    </div>
-                    <div class="w-24">
-                      <span class="text-[8px] text-slate-400 uppercase tracking-widest block mb-6">Penanggung Jawab</span>
-                      <span class="font-bold text-slate-800 text-[10px] border-b border-slate-300 pb-0.5 block truncate">${currentUserName}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="mt-8 text-center pt-6 opacity-60">
-                   <p class="text-[10px] text-slate-500 italic font-medium">${invoiceNote}</p>
-                </div>
-
-              </div>
-
-              <div class="fixed bottom-6 right-6 no-print">
-                <button onclick="window.print();" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-2xl flex items-center gap-2 transition-all">
-                  <i class="fa-solid fa-print"></i> Cetak Sekarang
-                </button>
-              </div>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      };
-
       const handleCreateEvent = async (e) => {
         e.preventDefault();
         const budget = parseFloat(newEventBudget.toString().replace(/\./g, ''));
@@ -952,7 +813,7 @@
         if (!instName || !numericTotal || !numericTenor) return;
         setIsLoading(true);
         
-        // Kalkulasi berapa uang yang dianggap "sudah lunas di awal" tanpa potong saldo
+        // Kalkulasi uang yang sudah lunas di awal
         const monthlyRec = Math.ceil(numericTotal / numericTenor);
         const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
 
@@ -979,14 +840,10 @@
         setIsLoading(true);
         const inst = installments.find(i => i.id === instPayModal.instId);
         
-        // Pastikan tidak melebihi sisa hutang
-        const currentPaid = parseFloat(inst.paid_amount || 0);
-        const totalAmount = parseFloat(inst.total_amount || 0);
-        const remainingDebt = Math.max(0, totalAmount - currentPaid);
-        
-        // Jika bayaran melebihi sisa hutang, batasi hanya sampai sisa hutangnya saja
-        const finalPayVal = payVal > remainingDebt ? remainingDebt : payVal;
-        const newPaidAmount = currentPaid + finalPayVal;
+        // Memastikan tidak over-payment
+        const remainingDebt = parseFloat(inst.total_amount || 0) - parseFloat(inst.paid_amount || 0);
+        const finalPayVal = Math.min(payVal, remainingDebt);
+        const newPaidAmount = parseFloat(inst.paid_amount || 0) + finalPayVal;
         
         const { error: err1 } = await supabase.from('installments').update({ paid_amount: newPaidAmount }).eq('id', inst.id);
         if (err1) { showToast("Gagal mengupdate progress cicilan.", "error"); setIsLoading(false); return; }
@@ -1000,8 +857,6 @@
           if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
           setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
           showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(finalPayVal.toString())}!`);
-        } else {
-          showToast("Gagal mencatat transaksi pembayaran.", "error");
         }
         setIsLoading(false);
       };
@@ -1052,12 +907,23 @@
       const handleCreateGoal = async (e) => {
         e.preventDefault();
         const numericTarget = parseFloat(goalTarget.toString().replace(/\./g, ''));
+        const numericInitial = parseFloat(goalInitialAmount.toString().replace(/\./g, '')) || 0; 
         if (!goalTitle || !numericTarget) return;
+        
         setIsLoading(true);
-        const newGoal = { title: goalTitle, target_amount: numericTarget, current_amount: 0, deadline: goalDeadline || null, user_email: user.email };
+        const newGoal = { 
+            title: goalTitle, 
+            target_amount: numericTarget, 
+            current_amount: numericInitial, 
+            deadline: goalDeadline || null, 
+            user_email: user.email 
+        };
+        
         const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
         if (error) showToast("Gagal membuat kantong tabungan!", "error"); else if (data) {
-          setSavingsGoals([...savingsGoals, data[0]]); setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); showToast("Kantong tabungan berhasil dibuat!");
+          setSavingsGoals([...savingsGoals, data[0]]); 
+          setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); setGoalInitialAmount(''); 
+          showToast("Kantong tabungan berhasil dibuat!");
         }
         setIsLoading(false);
       };
@@ -1162,19 +1028,7 @@
                   { text: "Analyze this image (receipt or bank mutation/statement). Find the most prominent single transaction or the first list item. Extract its details. Return ONLY a valid JSON object. DO NOT wrap it in any markdown blocks. Format strictly as: {\"amount\": 150000, \"description\": \"Merchant/Item Name\", \"date\": \"YYYY-MM-DD\", \"transaction_type\": \"expense\"}. Use 'income' if it is Credit/CR/Masuk/PEND, and 'expense' if it is Debit/DB/Keluar." },
                   { inlineData: { mimeType: mimeType, data: base64Data } }
                 ]
-              }],
-              generationConfig: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: "OBJECT",
-                  properties: {
-                    amount: { type: "INTEGER" },
-                    description: { type: "STRING" },
-                    date: { type: "STRING" },
-                    transaction_type: { type: "STRING", description: "Must be 'expense' or 'income'" }
-                  }
-                }
-              }
+              }]
             };
 
             const fetchWithRetry = async (retries = 5, delay = 1000) => {
@@ -1214,7 +1068,7 @@
                setCategory((categories?.expense || defaultCategories.expense)[0] || 'Lainnya');
             }
             
-            showToast("Data mutasi berhasil dipindai! Silakan cek formulir.");
+            showToast("Data mutasi berhasil dipindai! Silakan cek formulir.", "success");
           } catch (error) { 
             console.error(error); 
             showToast("Gagal memproses gambar. Pastikan koneksi stabil.", "error"); 
@@ -1430,7 +1284,6 @@
                 <button onClick={() => changeTab('trips')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'trips' ? 'text-cyan-600 border-cyan-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-plane-departure mr-1.5"></i> Perjalanan</button>
                 <button onClick={() => changeTab('splitbill')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'splitbill' ? 'text-fuchsia-600 border-fuchsia-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-users-viewfinder mr-1.5"></i> Split Bill</button>
                 <button onClick={() => changeTab('insights')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-lightbulb mr-1.5"></i> Laporan Pintar</button>
-                <button onClick={() => changeTab('invoice')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'invoice' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-file-invoice-dollar mr-1.5"></i> Kuitansi</button>
                 <button onClick={() => changeTab('settings')} className={`pb-3 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'settings' ? 'text-indigo-600 border-indigo-600' : 'text-slate-500 border-transparent hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}><i className="fa-solid fa-gear mr-1.5"></i> Pengaturan</button>
               </div>
             </div>
@@ -1493,7 +1346,7 @@
                             onClick={() => fileInputRef.current?.click()}
                             className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
                             disabled={isScanning}
-                            title="Otomatis isi form dari mutasi bank"
+                            title="Otomatis isi form dari foto struk"
                           >
                             {isScanning ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
                             {isScanning ? 'Membaca...' : 'Scan AI'}
@@ -1599,7 +1452,6 @@
                                 <p className={`font-bold ${isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'} ${privacyFilter}`}>{isIncome ? '+' : '-'}{formatRupiah(t.amount)}</p>
                                 <div className="flex gap-1">
                                   <button onClick={() => handleEditClick(t)} className="text-slate-400 hover:text-blue-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Edit Transaksi"><i className="fa-solid fa-pen"></i></button>
-                                  <button onClick={() => handleLoadToInvoice(t)} className="text-slate-400 hover:text-indigo-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Cetak Kuitansi"><i className="fa-solid fa-file-invoice-dollar"></i></button>
                                   <button onClick={() => handleDelete(t.id)} className="text-slate-400 hover:text-rose-600 p-2 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="Hapus"><i className="fa-solid fa-trash"></i></button>
                                 </div>
                               </div>
@@ -1636,6 +1488,11 @@
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Dana (Rp)</label>
                           <input type="text" inputMode="numeric" value={goalTarget} onChange={(e) => setGoalTarget(formatInputNumber(e.target.value))} required className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 15.000.000" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sudah Terkumpul (Opsional)</label>
+                          <input type="text" inputMode="numeric" value={goalInitialAmount} onChange={(e) => setGoalInitialAmount(formatInputNumber(e.target.value))} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" placeholder="Cth: 5.000.000" />
+                          <p className="text-[10px] text-slate-500 mt-1.5">Nominal ini dianggap sebagai saldo awal dan <strong className="text-emerald-600 dark:text-emerald-400">TIDAK</strong> akan memotong saldo dompet Anda.</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Target Tercapai (Opsional)</label>
@@ -1750,15 +1607,11 @@
                       installments.map(inst => {
                         const total = parseFloat(inst.total_amount) || 0;
                         const paid = parseFloat(inst.paid_amount) || 0;
-                        const remaining = Math.max(0, total - paid);
                         const progress = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
                         const isCompleted = total > 0 && paid >= total;
-                        
                         const tenor = parseInt(inst.tenor_months) || 1;
                         const monthlyRec = Math.ceil(total / tenor);
-                        
-                        // Perhitungan bulan berjalan berdasarkan rasio pembayaran
-                        const monthsPaid = monthlyRec > 0 ? Math.floor(paid / monthlyRec) : 0;
+                        const monthsPaid = monthlyRec > 0 ? Math.min(Math.floor(paid / monthlyRec), tenor) : 0;
                         
                         return (
                           <div key={inst.id} className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm relative group overflow-hidden">
@@ -1768,10 +1621,10 @@
                               <i className={`fa-solid ${isCompleted ? 'fa-check-double' : 'fa-credit-card'} text-xl`}></i>
                             </div>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{inst.item_name}</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{isCompleted ? 'Hutang Lunas!' : `Cicilan ${Math.min(monthsPaid, tenor)} dari ${inst.tenor_months} bln`}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{isCompleted ? 'Hutang Lunas!' : `Cicilan ${monthsPaid} dari ${inst.tenor_months} bln`}</p>
                             <div className="mb-2 flex justify-between text-sm font-medium">
                               <span className={`${isCompleted ? 'text-emerald-600' : 'text-violet-600'} ${privacyFilter}`}>{formatRupiah(paid)}</span>
-                              <span className={`text-slate-400 ${privacyFilter}`}>Sisa: {formatRupiah(remaining)}</span>
+                              <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(total)}</span>
                             </div>
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6">
                               <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-violet-500'}`} style={{ width: `${progress}%` }}></div>
@@ -1785,11 +1638,9 @@
                               <div className="flex gap-2">
                                 <button 
                                   onClick={() => {
-                                    // Munculkan modal bayar dengan rekomendasi nominal sisa per bulan (tidak melebihi sisa total)
-                                    const recommendedPayment = Math.min(monthlyRec, remaining);
                                     setInstPayModal({
                                       isOpen: true, instId: inst.id, instName: inst.item_name, 
-                                      amount: formatInputNumber(recommendedPayment.toString()), wallet: wallets[0]
+                                      amount: formatInputNumber(monthlyRec.toString()), wallet: wallets[0]
                                     });
                                   }} 
                                   className="flex-1 py-2.5 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
