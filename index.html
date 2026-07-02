@@ -67,9 +67,10 @@
         const dateB = new Date(b.date).getTime();
         if (dateA === dateB) {
           // Jika di tanggal yang sama, urutkan berdasarkan waktu buat (terbaru di atas)
-          const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
-          const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
-          return timeB - timeA;
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          if (timeA !== timeB) return timeB - timeA;
+          return 0; // Fallback jika kolom created_at tidak ada di Supabase
         }
         return dateB - dateA;
       });
@@ -388,8 +389,9 @@
         const fetchData = async () => {
           setIsLoading(true);
           try {
-            // Ditambahkan .order('created_at', { ascending: false }) agar pengambilan dari database otomatis urut
-            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false }).order('created_at', { ascending: false });
+            // MENGHAPUS order('created_at') KARENA KOLOM TIDAK ADA DI SUPABASE ANDA
+            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+            if (txRes.error) console.error("Error load TX:", txRes.error);
             if (txRes.data) setTransactions(txRes.data);
             
             const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
@@ -980,13 +982,13 @@
           
           if (editingTxId) {
             const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
-            if (error) { showToast("Gagal memperbarui data!", "error"); } else {
+            if (error) { showToast("Gagal memperbarui data: " + error.message, "error"); } else {
               setTransactions(prev => sortTransactionsHelper(prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t)));
               showToast("Transaksi berhasil diperbarui!"); cancelEdit();
             }
           } else {
             const { data, error } = await supabase.from('transactions').insert([txData]).select();
-            if (error) { showToast("Gagal menyimpan data!", "error"); } 
+            if (error) { showToast("Gagal menyimpan data: " + error.message, "error"); } 
             else if (data && data.length > 0) {
               setTransactions(prev => sortTransactionsHelper([data[0], ...prev])); 
               cancelEdit(); showToast("Transaksi berhasil dicatat!");
@@ -999,7 +1001,6 @@
           console.error(err);
           showToast("Terjadi kesalahan sistem / koneksi.", "error");
         } finally {
-          // INILAH YANG MEMBUAT LOADING BERHENTI APAPUN YANG TERJADI
           setIsLoading(false);
         }
       };
