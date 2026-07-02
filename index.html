@@ -240,7 +240,7 @@
 
       const [activeTab, setActiveTab] = useState(() => {
         const hash = window.location.hash.replace('#', '');
-        // Daftar valid tab (Dihapus tab 'more' karena UI baru di HP)
+        // Valid tabs untuk sistem navigasi baru
         const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings'];
         return validTabs.includes(hash) ? hash : 'dashboard';
       });
@@ -332,6 +332,15 @@
         if (isDarkMode) { document.documentElement.classList.add('dark'); localStorage.setItem('darkMode', 'true'); } 
         else { document.documentElement.classList.remove('dark'); localStorage.setItem('darkMode', 'false'); }
       }, [isDarkMode]);
+
+      // FUNGSI NAVIGASI YANG DIPERBAIKI (TIDAK BOLEH DIHAPUS)
+      const changeTab = (tabName) => {
+        if (tabName !== activeTab) {
+          window.history.pushState({ tab: tabName }, '', `#${tabName}`);
+          setActiveTab(tabName);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      };
 
       useEffect(() => {
         if (!window.history.state || !window.history.state.tab) {
@@ -572,11 +581,6 @@
 
 
       // 5. Fungsi Handlers
-      const showToast = (message, type = 'success') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 3000);
-      };
-
       const loadCustomData = (email) => {
         try {
           const savedCats = localStorage.getItem(`finansialku_cats_${email}`);
@@ -1282,13 +1286,13 @@
           {/* Modal Top Up Tabungan */}
           {topUpModal.isOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up border-t-4 border-emerald-500">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Isi Tabungan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan uang dari dompet ke <strong className="text-indigo-600 dark:text-indigo-400">{topUpModal.goalTitle}</strong>.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Pindahkan uang dari dompet ke <strong className="text-emerald-600 dark:text-emerald-400">{topUpModal.goalTitle}</strong>.</p>
                 <form onSubmit={handleTopUpSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal (Rp)</label>
-                    <input type="text" inputMode="numeric" value={topUpAmount} onChange={(e) => setTopUpAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white" placeholder="Contoh: 100.000" />
+                    <input type="text" inputMode="numeric" value={topUpAmount} onChange={(e) => setTopUpAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder="Contoh: 100.000" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sumber Dana / Dompet</label>
@@ -1308,13 +1312,13 @@
           {/* Modal Tarik Tabungan */}
           {withdrawModal.isOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up border-t-4 border-emerald-500">
+              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up border-t-4 border-amber-500">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Tarik Tabungan</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Cairkan saldo dari <strong className="text-emerald-600 dark:text-emerald-400">{withdrawModal.goalTitle}</strong> ke dompet Anda.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Cairkan saldo dari <strong className="text-amber-600 dark:text-amber-400">{withdrawModal.goalTitle}</strong> ke dompet Anda.</p>
                 <form onSubmit={handleWithdrawSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nominal Tarik (Rp)</label>
-                    <input type="text" inputMode="numeric" value={withdrawAmount} onChange={(e) => setWithdrawAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white" placeholder={`Maks: ${formatInputNumber(withdrawModal.maxAmount.toString())}`} />
+                    <input type="text" inputMode="numeric" value={withdrawAmount} onChange={(e) => setWithdrawAmount(formatInputNumber(e.target.value))} required className="block w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-white" placeholder={`Maks: ${formatInputNumber(withdrawModal.maxAmount.toString())}`} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Pilih Tujuan Dana</label>
@@ -1324,7 +1328,7 @@
                   </div>
                   <div className="flex gap-3 mt-8">
                     <button type="button" onClick={() => setWithdrawModal({isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0]})} className="flex-1 py-3 px-4 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 font-medium">Batal</button>
-                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Tarik Dana'}</button>
+                    <button type="submit" disabled={isLoading} className="flex-1 py-3 px-4 rounded-xl text-white bg-amber-500 hover:bg-amber-600 font-medium">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Tarik Dana'}</button>
                   </div>
                 </form>
               </div>
@@ -1390,7 +1394,7 @@
                 </div>
 
                 {/* ===================== FITUR PINTAR (QUICK MENU GRID - MOBILE OPTIMIZED) ===================== */}
-                <div className="mb-8">
+                <div className="mb-8 md:hidden">
                   <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 ml-1">Menu Utama</h3>
                   <div className="grid grid-cols-4 gap-3 sm:gap-6">
                     <button onClick={() => changeTab('installments')} className="bg-white dark:bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:bg-violet-50 dark:hover:bg-slate-700/50 transition-all active:scale-95">
@@ -1443,7 +1447,7 @@
                           <button 
                             type="button" 
                             onClick={() => fileInputRef.current?.click()}
-                            className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition-colors flex items-center gap-1.5"
+                            className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
                             disabled={isScanning}
                             title="Otomatis isi form dari foto struk"
                           >
@@ -1500,7 +1504,7 @@
                               Batal
                             </button>
                           )}
-                          <button type="submit" disabled={isLoading || isScanning} className={`${editingTxId ? 'w-2/3' : 'w-full'} bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none`}>
+                          <button type="submit" disabled={isLoading || isScanning} className={`${editingTxId ? 'w-2/3' : 'w-full'} bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl flex justify-center gap-2 transition-colors`}>
                             {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : (editingTxId ? 'Perbarui Transaksi' : 'Simpan Transaksi')}
                           </button>
                         </div>
@@ -2340,7 +2344,7 @@
 
           </main>
 
-          {/* MOBILE BOTTOM NAVIGATION - UX BARU YANG LEBIH BAIK */}
+          {/* MOBILE BOTTOM NAVIGATION */}
           {isLoggedIn && (
             <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-1 z-50 pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.05)]">
               <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
