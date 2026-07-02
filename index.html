@@ -254,10 +254,12 @@
       const [filterMonth, setFilterMonth] = useState(currentSysMonth);
       const [filterYear, setFilterYear] = useState(currentSysYear);
       const [filterWallet, setFilterWallet] = useState('all');
+
       // Tabungan
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
+      const [goalInitialAmount, setGoalInitialAmount] = useState(''); 
       const [goalDeadline, setGoalDeadline] = useState('');
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '', wallet: defaultWallets[0] });
       const [topUpAmount, setTopUpAmount] = useState('');
@@ -555,13 +557,6 @@
       const showToast = (message, type = 'success') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3000);
-      };
-
-      const changeTab = (tabName) => {
-        if (tabName !== activeTab) {
-          window.history.pushState({ tab: tabName }, '', `#${tabName}`);
-          setActiveTab(tabName);
-        }
       };
 
       const loadCustomData = (email) => {
@@ -992,7 +987,38 @@
         setIsLoading(false);
       };
 
-      const handleAuth = async (e) => {
+      const handleGenerateAIInsight = async () => {
+        if (!smartInsights) return;
+        setIsAiLoading(true);
+        setAiInsightText('');
+        
+        try {
+          const apiKey = ""; 
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+          const prompt = `Sebagai pakar perencana keuangan (Financial Advisor) profesional, berikan 2 paragraf singkat analisis dan saran berdasarkan data keuangan klien bulan ini:
+          Pemasukan: Rp ${smartInsights.cmIncome}
+          Pengeluaran: Rp ${smartInsights.cmExpense}
+          Kategori Paling Boros: ${smartInsights.biggestCat} (Rp ${smartInsights.biggestCatAmount})
+          Uang yang ditabung: ${smartInsights.savingsRatio}% dari pemasukan.
+          Sisa saldo bulan ini: Rp ${smartInsights.cmIncome - smartInsights.cmExpense}
+          Gunakan bahasa Indonesia yang ramah, profesional, dan berikan tips nyata yang *actionable*. Format dalam bentuk paragraf biasa tanpa markdown aneh-aneh.`;
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }]
+            })
+          });
+
+          if (!response.ok) throw new Error("Gagal mengambil data dari AI.");
+          
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (text) {
+            setAiInsightText(text);
           } else {
             throw new Error("Respon AI kosong.");
           }
@@ -1561,6 +1587,7 @@
                               <span className={`text-slate-400 ${privacyFilter}`}>{formatRupiah(target)}</span>
                             </div>
                             <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-gradient-to-r from-amber-400 to-yellow-500' : 'bg-emerald-500'}`} style={{ width: `${progress}%` }}></div></div>
+                            
                             <div className="flex gap-2">
                               <button onClick={() => setTopUpModal({isOpen: true, goalId: goal.id, goalTitle: goal.title, wallet: wallets[0] || defaultWallets[0]})} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-700 dark:text-slate-200 hover:text-emerald-600 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors border border-transparent"><i className="fa-solid fa-plus"></i> Isi Tabungan</button>
                               {current > 0 && (
@@ -2219,124 +2246,4 @@
                     <div>
                       <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 border-b border-slate-100 dark:border-slate-700 pb-2">Kategori Pemasukan</h4>
                       <div className="flex flex-wrap gap-2">
-                        {(categories?.income || defaultCategories.income).map(cat => (
-                          <span key={cat} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300">
-                            {cat} 
-                            {!defaultCategories.income.includes(cat) && <button onClick={() => handleDeleteCategory(cat, 'income')} className="text-slate-400 hover:text-rose-500 ml-1"><i className="fa-solid fa-xmark"></i></button>}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 p-6 mb-8">
-                  <h3 className="text-lg font-bold text-rose-700 dark:text-rose-400 mb-4 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> Manajemen Data & Keamanan</h3>
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Sinkronisasi Kalender (.ics)</p><p className="text-sm text-slate-500 dark:text-slate-400">Ekspor jadwal tenggat tabungan & pengingat cicilan bulan depan ke kalender Anda.</p></div>
-                      <button onClick={handleExportCalendar} className="mt-3 sm:mt-0 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-regular fa-calendar-plus mr-1.5"></i> Jadwal Kalender</button>
-                    </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Ekspor Data (CSV)</p><p className="text-sm text-slate-500 dark:text-slate-400">Unduh seluruh riwayat transaksi Anda untuk diolah di Excel.</p></div>
-                      <button onClick={handleExportCSV} className="mt-3 sm:mt-0 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-download mr-1.5"></i> Unduh Data</button>
-                    </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-rose-100 dark:border-rose-900/50">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Hapus Seluruh Data</p><p className="text-sm text-slate-500 dark:text-slate-400">Menghapus semua riwayat transaksi. Tindakan ini permanen.</p></div>
-                      <button onClick={handleDeleteAll} className="mt-3 sm:mt-0 px-4 py-2 bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-200 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-trash-can mr-1.5"></i> Kosongkan Data</button>
-                    </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Keluar Akun</p><p className="text-sm text-slate-500 dark:text-slate-400">Akhiri sesi Anda dari perangkat ini.</p></div>
-                      <button onClick={handleLogout} className="mt-3 sm:mt-0 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-right-from-bracket mr-1.5"></i> Keluar</button>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* ===================== TAB MENU LAINNYA (MOBILE ONLY) ===================== */}
-            {activeTab === 'more' && (
-              <div className="animate-fade-in space-y-8 md:hidden">
-                <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                   <div className="relative z-10">
-                     <h2 className="text-3xl font-black mb-2">Menu Lainnya</h2>
-                     <p className="text-slate-300 text-sm">Jelajahi seluruh fitur FinansialKu</p>
-                   </div>
-                   <i className="fa-solid fa-shapes text-8xl absolute -right-4 -bottom-4 text-white/5"></i>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => changeTab('installments')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-credit-card"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Cicilan</span>
-                  </button>
-                  <button onClick={() => changeTab('events')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-calendar-star"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Acara Khusus</span>
-                  </button>
-                  <button onClick={() => changeTab('insights')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all text-center">
-                    <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-lightbulb"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Laporan Pintar</span>
-                  </button>
-                  <button onClick={() => changeTab('settings')} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all col-span-2 text-center">
-                    <div className="w-14 h-14 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl flex items-center justify-center text-2xl"><i className="fa-solid fa-gear"></i></div>
-                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Pengaturan</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-          </main>
-
-          {/* MOBILE BOTTOM NAVIGATION */}
-          {isLoggedIn && (
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center px-1 py-2 z-50 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-              <button onClick={() => changeTab('dashboard')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-house text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Beranda</span>
-              </button>
-              <button onClick={() => changeTab('savings')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'savings' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-piggy-bank text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Tabungan</span>
-              </button>
-              <button onClick={() => changeTab('trips')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'trips' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-plane-departure text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Trip</span>
-              </button>
-              <button onClick={() => changeTab('splitbill')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'splitbill' ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-users-viewfinder text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Split</span>
-              </button>
-              <button onClick={() => changeTab('more')} className={`flex flex-col items-center justify-center w-full py-2 transition-colors ${activeTab === 'more' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                <i className="fa-solid fa-grip text-xl mb-1"></i>
-                <span className="text-[10px] font-bold">Lainnya</span>
-              </button>
-            </nav>
-          )}
-
-        </div>
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-
-  <style>
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    html.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
-    .snap-x { scroll-snap-type: x mandatory; }
-    .snap-start { scroll-snap-align: start; }
-    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-    
-    @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-  </style>
-</body>
-</html>
+                        {(categories?.income || defaultCategories.income
