@@ -240,7 +240,6 @@
 
       const [activeTab, setActiveTab] = useState(() => {
         const hash = window.location.hash.replace('#', '');
-        // Valid tabs untuk sistem navigasi baru
         const validTabs = ['dashboard', 'savings', 'installments', 'events', 'trips', 'splitbill', 'insights', 'settings'];
         return validTabs.includes(hash) ? hash : 'dashboard';
       });
@@ -373,22 +372,26 @@
         if (!isLoggedIn || !user) return;
         const fetchData = async () => {
           setIsLoading(true);
-          const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
-          if (txRes.data) setTransactions(txRes.data);
-          
-          const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-          if (svRes.data) setSavingsGoals(svRes.data || []); 
+          try {
+            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+            if (txRes.data) setTransactions(txRes.data);
+            
+            const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+            if (svRes.data) setSavingsGoals(svRes.data || []); 
 
-          const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-          if (instRes.data) setInstallments(instRes.data || []); 
+            const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+            if (instRes.data) setInstallments(instRes.data || []); 
 
-          const evRes = await supabase.from('events').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
-          if (evRes.data) setEvents(evRes.data || []);
+            const evRes = await supabase.from('events').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
+            if (evRes.data) setEvents(evRes.data || []);
 
-          const trRes = await supabase.from('trips').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
-          if (trRes.data) setTrips(trRes.data || []);
-          
-          setIsLoading(false);
+            const trRes = await supabase.from('trips').select('*').eq('user_email', user.email).order('created_at', { ascending: false });
+            if (trRes.data) setTrips(trRes.data || []);
+          } catch (err) {
+            console.error("Gagal memuat data", err);
+          } finally {
+            setIsLoading(false);
+          }
         };
         fetchData();
       }, [isLoggedIn, user]);
@@ -580,7 +583,7 @@
       }, [splitTotals, splitPersons]);
 
 
-      // 5. Fungsi Handlers
+      // 5. Fungsi Handlers ANTI-STUCK (Dilengkapi Try-Catch-Finally)
       const loadCustomData = (email) => {
         try {
           const savedCats = localStorage.getItem(`finansialku_cats_${email}`);
@@ -628,8 +631,11 @@
             if (error) throw error;
             showToast('Berhasil masuk!', 'success');
           }
-        } catch (err) { showToast(err.message, 'error'); }
-        setIsLoading(false);
+        } catch (err) { 
+          showToast(err.message, 'error'); 
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       const handleLogout = () => {
@@ -637,8 +643,12 @@
           title: "Keluar Akun?",
           message: "Anda akan keluar dari sesi saat ini.",
           onConfirm: async () => {
-            await supabase.auth.signOut();
-            showToast("Berhasil keluar.");
+            try {
+              await supabase.auth.signOut();
+              showToast("Berhasil keluar.");
+            } catch (err) {
+              showToast("Gagal keluar sesi", "error");
+            }
           }
         });
       };
@@ -646,10 +656,15 @@
       const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-        const { data, error } = await supabase.auth.updateUser({ data: { name: profileName } });
-        if (error) showToast("Gagal memperbarui profil", "error");
-        else { setUser(data.user); showToast("Profil berhasil diperbarui!"); }
-        setIsLoading(false);
+        try {
+          const { data, error } = await supabase.auth.updateUser({ data: { name: profileName } });
+          if (error) showToast("Gagal memperbarui profil", "error");
+          else { setUser(data.user); showToast("Profil berhasil diperbarui!"); }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       const handleAddCategory = (e) => {
@@ -696,10 +711,15 @@
           message: "PERINGATAN: Seluruh riwayat transaksi Anda akan dihapus secara permanen. Tindakan ini tidak bisa dibatalkan!",
           onConfirm: async () => {
             setIsLoading(true);
-            const { error } = await supabase.from('transactions').delete().eq('user_email', user.email);
-            if (error) showToast("Gagal menghapus seluruh data.", "error");
-            else { setTransactions([]); showToast("Seluruh riwayat transaksi telah dikosongkan."); }
-            setIsLoading(false);
+            try {
+              const { error } = await supabase.from('transactions').delete().eq('user_email', user?.email);
+              if (error) showToast("Gagal menghapus seluruh data.", "error");
+              else { setTransactions([]); showToast("Seluruh riwayat transaksi telah dikosongkan."); }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
+            } finally {
+              setIsLoading(false);
+            }
           }
         });
       };
@@ -772,17 +792,29 @@
         const budget = parseFloat(newEventBudget.toString().replace(/\./g, ''));
         if (!newEventName || isNaN(budget)) return;
         setIsLoading(true);
-        const { data, error } = await supabase.from('events').insert([{ event_name: newEventName, budget_limit: budget, user_email: user.email }]).select();
-        if (error) { showToast("Gagal membuat acara. Cek SQL Editor Supabase!", "error"); } else if (data) { setEvents([data[0], ...events]); setNewEventName(''); setNewEventBudget(''); showToast("Acara khusus berhasil dibuat!"); }
-        setIsLoading(false);
+        try {
+          const { data, error } = await supabase.from('events').insert([{ event_name: newEventName, budget_limit: budget, user_email: user?.email }]).select();
+          if (error) { showToast("Gagal membuat acara. Cek SQL Editor Supabase!", "error"); } 
+          else if (data && data.length > 0) { 
+            setEvents([data[0], ...events]); setNewEventName(''); setNewEventBudget(''); showToast("Acara khusus berhasil dibuat!"); 
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       const handleDeleteEvent = (id) => {
         setConfirmAction({
           title: "Hapus Acara?", message: "Data anggaran acara ini akan dihapus permanen.",
           onConfirm: async () => {
-            const { error } = await supabase.from('events').delete().eq('id', id);
-            if (!error) { setEvents(events.filter(e => e.id !== id)); showToast("Acara telah dihapus."); } else { showToast("Gagal menghapus acara.", "error"); }
+            try {
+              const { error } = await supabase.from('events').delete().eq('id', id);
+              if (!error) { setEvents(events.filter(e => e.id !== id)); showToast("Acara telah dihapus."); } else { showToast("Gagal menghapus acara.", "error"); }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
+            }
           }
         });
       };
@@ -792,17 +824,29 @@
         const budget = parseFloat(newTripBudget.toString().replace(/\./g, ''));
         if (!newTripName || isNaN(budget) || !newTripDest || !newTripDate) return;
         setIsLoading(true);
-        const { data, error } = await supabase.from('trips').insert([{ trip_name: newTripName, budget_limit: budget, destination: newTripDest, date: newTripDate, user_email: user.email }]).select();
-        if (error) { showToast("Gagal membuat rencana. Pastikan tabel trips sudah dibuat di Supabase!", "error"); } else if (data) { setTrips([data[0], ...trips]); setNewTripName(''); setNewTripBudget(''); setNewTripDest(''); setNewTripDate(''); showToast("Rencana perjalanan baru berhasil dibuat!"); }
-        setIsLoading(false);
+        try {
+          const { data, error } = await supabase.from('trips').insert([{ trip_name: newTripName, budget_limit: budget, destination: newTripDest, date: newTripDate, user_email: user?.email }]).select();
+          if (error) { showToast("Gagal membuat rencana.", "error"); } 
+          else if (data && data.length > 0) { 
+            setTrips([data[0], ...trips]); setNewTripName(''); setNewTripBudget(''); setNewTripDest(''); setNewTripDate(''); showToast("Rencana perjalanan baru berhasil dibuat!"); 
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       const handleDeleteTrip = (id) => {
         setConfirmAction({
           title: "Hapus Rencana Perjalanan?", message: "Data rencana perjalanan ini akan dihapus permanen.",
           onConfirm: async () => {
-            const { error } = await supabase.from('trips').delete().eq('id', id);
-            if (!error) { setTrips(trips.filter(t => t.id !== id)); showToast("Rencana perjalanan telah dihapus."); } else { showToast("Gagal menghapus rencana.", "error"); }
+            try {
+              const { error } = await supabase.from('trips').delete().eq('id', id);
+              if (!error) { setTrips(trips.filter(t => t.id !== id)); showToast("Rencana perjalanan telah dihapus."); } else { showToast("Gagal menghapus rencana.", "error"); }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
+            }
           }
         });
       };
@@ -829,23 +873,34 @@
         const numericPaidMonths = parseInt(instPaidMonths) || 0;
         if (!instName || !numericTotal || !numericTenor) return;
         setIsLoading(true);
-        
-        // Kalkulasi uang yang sudah lunas di awal
-        const monthlyRec = Math.ceil(numericTotal / numericTenor);
-        const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
+        try {
+          // Kalkulasi uang yang sudah lunas di awal
+          const monthlyRec = Math.ceil(numericTotal / numericTenor);
+          const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
 
-        const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: initialPaidAmount, tenor_months: numericTenor, user_email: user.email };
-        const { data, error } = await supabase.from('installments').insert([newInst]).select();
-        if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } else if (data) { setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); setInstPaidMonths(''); showToast("Cicilan baru berhasil dicatat!"); }
-        setIsLoading(false);
+          const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: initialPaidAmount, tenor_months: numericTenor, user_email: user?.email };
+          const { data, error } = await supabase.from('installments').insert([newInst]).select();
+          if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } 
+          else if (data && data.length > 0) { 
+            setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); setInstPaidMonths(''); showToast("Cicilan baru berhasil dicatat!"); 
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       const handleDeleteInstallment = (id) => {
         setConfirmAction({
           title: "Hapus Data Cicilan?", message: "Data cicilan ini akan dihapus dari daftar pantauan Anda.",
           onConfirm: async () => {
-            const { error } = await supabase.from('installments').delete().eq('id', id);
-            if (error) showToast("Gagal menghapus cicilan!", "error"); else { setInstallments(installments.filter(i => i.id !== id)); showToast("Cicilan dihapus."); }
+            try {
+              const { error } = await supabase.from('installments').delete().eq('id', id);
+              if (error) showToast("Gagal menghapus cicilan!", "error"); else { setInstallments(installments.filter(i => i.id !== id)); showToast("Cicilan dihapus."); }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
+            }
           }
         });
       };
@@ -855,27 +910,34 @@
         const payVal = parseFloat(instPayModal.amount.toString().replace(/\./g, ''));
         if (!payVal || payVal <= 0) return;
         setIsLoading(true);
-        const inst = installments.find(i => i.id === instPayModal.instId);
-        
-        // Memastikan tidak over-payment
-        const remainingDebt = parseFloat(inst.total_amount || 0) - parseFloat(inst.paid_amount || 0);
-        const finalPayVal = Math.min(payVal, remainingDebt);
-        const newPaidAmount = parseFloat(inst.paid_amount || 0) + finalPayVal;
-        
-        const { error: err1 } = await supabase.from('installments').update({ paid_amount: newPaidAmount }).eq('id', inst.id);
-        if (err1) { showToast("Gagal mengupdate progress cicilan.", "error"); setIsLoading(false); return; }
-        
-        const txDate = getLocalDateString();
-        const newTx = { type: 'expense', amount: finalPayVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user.email };
-        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
-        
-        if (!err2) {
-          setInstallments(installments.map(i => i.id === inst.id ? { ...i, paid_amount: newPaidAmount } : i));
-          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
-          showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(finalPayVal.toString())}!`);
+        try {
+          const inst = installments.find(i => i.id === instPayModal.instId);
+          
+          // Memastikan tidak over-payment
+          const remainingDebt = parseFloat(inst.total_amount || 0) - parseFloat(inst.paid_amount || 0);
+          const finalPayVal = Math.min(payVal, remainingDebt);
+          const newPaidAmount = parseFloat(inst.paid_amount || 0) + finalPayVal;
+          
+          const { error: err1 } = await supabase.from('installments').update({ paid_amount: newPaidAmount }).eq('id', inst.id);
+          if (err1) { showToast("Gagal mengupdate progress cicilan.", "error"); return; }
+          
+          const txDate = getLocalDateString();
+          const newTx = { type: 'expense', amount: finalPayVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user?.email };
+          const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+          
+          if (!err2) {
+            setInstallments(installments.map(i => i.id === inst.id ? { ...i, paid_amount: newPaidAmount } : i));
+            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
+            showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(finalPayVal.toString())}!`);
+          } else {
+            showToast("Gagal mencatat transaksi pengeluaran.", "error");
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleEditClick = (tx) => {
@@ -884,38 +946,57 @@
       };
 
       const cancelEdit = () => {
-        setEditingTxId(null); setType('expense'); setAmount(''); setDescription(''); setCategory((categories?.expense || defaultCategories.expense)[0]); setDate(getLocalDateString()); setSelectedEventId('');
+        setEditingTxId(null); setType('expense'); setAmount(''); setDescription(''); 
+        setCategory((categories?.expense || defaultCategories.expense)[0] || 'Lainnya'); 
+        setDate(getLocalDateString()); setSelectedEventId('');
       };
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount.toString().replace(/\./g, ''));
         if (!numericAmount || !description || !category || !date || !selectedWallet) return;
+        
         setIsLoading(true);
-        const txData = { type, amount: numericAmount, description, category, date, wallet: selectedWallet, user_email: user.email, event_id: selectedEventId || null };
-        if (editingTxId) {
-          const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
-          if (error) { showToast("Gagal memperbarui data!", "error"); } else {
-            setTransactions(prev => prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t).sort((a,b) => new Date(b.date) - new Date(a.date)));
-            showToast("Transaksi berhasil diperbarui!"); cancelEdit();
+        try {
+          const txData = { type, amount: numericAmount, description, category, date, wallet: selectedWallet, user_email: user?.email, event_id: selectedEventId || null };
+          
+          if (editingTxId) {
+            const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
+            if (error) { showToast("Gagal memperbarui data!", "error"); } else {
+              setTransactions(prev => prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t).sort((a,b) => new Date(b.date) - new Date(a.date)));
+              showToast("Transaksi berhasil diperbarui!"); cancelEdit();
+            }
+          } else {
+            const { data, error } = await supabase.from('transactions').insert([txData]).select();
+            if (error) { showToast("Gagal menyimpan data!", "error"); } 
+            else if (data && data.length > 0) {
+              setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); 
+              cancelEdit(); showToast("Transaksi berhasil dicatat!");
+              if (type === 'income' && numericAmount >= 100000) setIncomeSplitter({ isOpen: true, amount: numericAmount });
+            } else {
+              cancelEdit(); showToast("Tersimpan (Perlu Muat Ulang)", "info");
+            }
           }
-        } else {
-          const { data, error } = await supabase.from('transactions').insert([txData]).select();
-          if (error) { showToast("Gagal menyimpan data!", "error"); } else if (data) {
-            setTransactions(prev => [data[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date))); cancelEdit(); showToast("Transaksi berhasil dicatat!");
-            if (type === 'income' && numericAmount >= 100000) setIncomeSplitter({ isOpen: true, amount: numericAmount });
-          }
+        } catch (err) {
+          console.error(err);
+          showToast("Terjadi kesalahan sistem / koneksi.", "error");
+        } finally {
+          // INILAH YANG MEMBUAT LOADING BERHENTI APAPUN YANG TERJADI
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleDelete = (id) => {
         setConfirmAction({
           title: "Hapus Transaksi?", message: "Data transaksi ini akan dihapus secara permanen.",
           onConfirm: async () => {
-            const { error } = await supabase.from('transactions').delete().eq('id', id);
-            if (error) showToast("Gagal menghapus data! Cek izin Supabase.", "error"); else {
-              setTransactions(transactions.filter(t => t.id !== id)); showToast("Transaksi berhasil dihapus.");
+            try {
+              const { error } = await supabase.from('transactions').delete().eq('id', id);
+              if (error) showToast("Gagal menghapus data! Cek izin Supabase.", "error"); else {
+                setTransactions(transactions.filter(t => t.id !== id)); showToast("Transaksi berhasil dihapus.");
+              }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
             }
           }
         });
@@ -928,30 +1009,36 @@
         if (!goalTitle || !numericTarget) return;
         
         setIsLoading(true);
-        const newGoal = { 
-            title: goalTitle, 
-            target_amount: numericTarget, 
-            current_amount: numericInitial, 
-            deadline: goalDeadline || null, 
-            user_email: user.email 
-        };
-        
-        const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
-        if (error) showToast("Gagal membuat kantong tabungan!", "error"); else if (data) {
-          setSavingsGoals([...savingsGoals, data[0]]); 
-          setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); setGoalInitialAmount(''); 
-          showToast("Kantong tabungan berhasil dibuat!");
+        try {
+          const newGoal = { 
+            title: goalTitle, target_amount: numericTarget, current_amount: numericInitial, 
+            deadline: goalDeadline || null, user_email: user?.email 
+          };
+          const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
+          if (error) showToast("Gagal membuat kantong tabungan!", "error"); 
+          else if (data && data.length > 0) {
+            setSavingsGoals([...savingsGoals, data[0]]); 
+            setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); setGoalInitialAmount(''); 
+            showToast("Kantong tabungan berhasil dibuat!");
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleDeleteGoal = (id) => {
         setConfirmAction({
           title: "Hapus Kantong Tabungan?", message: "Kantong tabungan ini akan dihapus. (Uang tidak akan kembali otomatis ke saldo utama)",
           onConfirm: async () => {
-            const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-            if (error) showToast("Gagal menghapus tabungan!", "error"); else {
-              setSavingsGoals(savingsGoals.filter(g => g.id !== id)); showToast("Kantong tabungan dihapus.");
+            try {
+              const { error } = await supabase.from('savings_goals').delete().eq('id', id);
+              if (error) showToast("Gagal menghapus tabungan!", "error"); else {
+                setSavingsGoals(savingsGoals.filter(g => g.id !== id)); showToast("Kantong tabungan dihapus.");
+              }
+            } catch (err) {
+              showToast("Terjadi kesalahan sistem.", "error");
             }
           }
         });
@@ -962,19 +1049,26 @@
         const topUpVal = parseFloat(topUpAmount.toString().replace(/\./g, ''));
         if (!topUpVal || topUpVal <= 0) return;
         setIsLoading(true);
-        const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
-        const newCurrent = parseFloat(goal.current_amount || 0) + topUpVal;
-        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
-        if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal memindahkan uang ke tabungan.", "error"); setIsLoading(false); return; }
-        const txDate = getLocalDateString();
-        const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: topUpModal.wallet, user_email: user.email };
-        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
-        if (!err2) {
-          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setTopUpModal({ isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0] }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
+        try {
+          const goal = savingsGoals.find(g => g.id === topUpModal.goalId);
+          const newCurrent = parseFloat(goal.current_amount || 0) + topUpVal;
+          const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
+          if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal memindahkan uang ke tabungan.", "error"); return; }
+          const txDate = getLocalDateString();
+          const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: topUpModal.wallet, user_email: user?.email };
+          const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+          if (!err2) {
+            setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
+            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            setTopUpModal({ isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0] }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
+          } else {
+            showToast("Nabung gagal dicatat ke riwayat.", "error");
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleWithdrawSubmit = async (e) => {
@@ -982,31 +1076,37 @@
         const withdrawVal = parseFloat(withdrawAmount.toString().replace(/\./g, ''));
         if (!withdrawVal || withdrawVal <= 0) return;
         setIsLoading(true);
-        const goal = savingsGoals.find(g => g.id === withdrawModal.goalId);
-        
-        if (withdrawVal > parseFloat(goal.current_amount)) {
-           showToast("Nominal tarik melebihi saldo tabungan!", "error");
-           setIsLoading(false);
-           return;
-        }
+        try {
+          const goal = savingsGoals.find(g => g.id === withdrawModal.goalId);
+          
+          if (withdrawVal > parseFloat(goal.current_amount)) {
+             showToast("Nominal tarik melebihi saldo tabungan!", "error");
+             return;
+          }
 
-        const newCurrent = parseFloat(goal.current_amount || 0) - withdrawVal;
-        
-        const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
-        if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal menarik uang dari tabungan.", "error"); setIsLoading(false); return; }
-        
-        const txDate = getLocalDateString();
-        const newTx = { type: 'income', amount: withdrawVal, description: `Pencairan: ${goal.title}`, category: 'Lainnya', date: txDate, wallet: withdrawModal.wallet, user_email: user.email };
-        const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
-        
-        if (!err2) {
-          setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-          if(txData) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
-          setWithdrawModal({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0] }); 
-          setWithdrawAmount(''); 
-          showToast(`Berhasil mencairkan Rp ${formatInputNumber(withdrawVal.toString())} ke ${withdrawModal.wallet}!`);
+          const newCurrent = parseFloat(goal.current_amount || 0) - withdrawVal;
+          
+          const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
+          if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal menarik uang dari tabungan.", "error"); return; }
+          
+          const txDate = getLocalDateString();
+          const newTx = { type: 'income', amount: withdrawVal, description: `Pencairan: ${goal.title}`, category: 'Lainnya', date: txDate, wallet: withdrawModal.wallet, user_email: user?.email };
+          const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
+          
+          if (!err2) {
+            setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
+            if(txData && txData.length > 0) setTransactions(prev => [txData[0], ...prev].sort((a,b) => new Date(b.date) - new Date(a.date)));
+            setWithdrawModal({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0] }); 
+            setWithdrawAmount(''); 
+            showToast(`Berhasil mencairkan Rp ${formatInputNumber(withdrawVal.toString())} ke ${withdrawModal.wallet}!`);
+          } else {
+             showToast("Pencairan gagal dicatat.", "error");
+          }
+        } catch (err) {
+          showToast("Terjadi kesalahan sistem.", "error");
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       };
 
       const handleGenerateAIInsight = async () => {
@@ -1799,7 +1899,9 @@
                           <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Pagu Anggaran (Budget Rp)</label>
                           <input type="text" inputMode="numeric" value={newEventBudget} onChange={e => setNewEventBudget(formatInputNumber(e.target.value))} placeholder="Contoh: 5.000.000" className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" required />
                         </div>
-                        <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 py-3 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 dark:shadow-none transition-all mt-2">Aktifkan Proyek</button>
+                        <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 py-3 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 dark:shadow-none transition-all mt-2">
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Aktifkan Proyek'}
+                        </button>
                       </form>
                     </div>
                   </div>
@@ -1910,7 +2012,7 @@
                           <input type="date" value={newTripDate} onChange={e => setNewTripDate(e.target.value)} className="block w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
                         </div>
                         <button type="submit" disabled={isLoading} className="w-full bg-cyan-600 py-3 text-white font-bold rounded-xl hover:bg-cyan-700 shadow-lg shadow-cyan-100 dark:shadow-none transition-all mt-2">
-                          Simpan Rencana
+                          {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan Rencana'}
                         </button>
                       </form>
                     </div>
@@ -2223,119 +2325,175 @@
               </div>
             )}
 
-            {/* ===================== TAB PENGATURAN ===================== */}
+            {/* ===================== TAB PENGATURAN (DIROMBAK UNTUK UI/UX LEBIH BAIK) ===================== */}
             {activeTab === 'settings' && (
-              <div className="animate-fade-in max-w-3xl mx-auto space-y-8">
+              <div className="animate-fade-in max-w-2xl mx-auto space-y-6">
                 
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-circle-user text-indigo-500"></i> Akun Saya</h3>
-                  <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-slate-700">
-                    <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-2xl">{(user?.user_metadata?.name || user?.email || 'U').charAt(0).toUpperCase()}</div>
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white text-lg">{user?.user_metadata?.name || 'Pengguna FinansialKu'}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{user?.email}</p>
+                {/* 1. Akun Saya */}
+                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sm:p-8">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><i className="fa-solid fa-circle-user text-indigo-500"></i> Profil Anda</h3>
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-8">
+                    <div className="w-20 h-20 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-3xl shadow-inner shrink-0">
+                      {(user?.user_metadata?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-center sm:text-left flex-1 w-full">
+                      <p className="font-bold text-slate-900 dark:text-white text-xl">{user?.user_metadata?.name || 'Pengguna FinansialKu'}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-4">{user?.email}</p>
+                      
+                      <form onSubmit={handleUpdateProfile} className="w-full">
+                        <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 text-left">Ubah Nama Tampilan</label>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} required className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="Ketik nama baru..." />
+                          <button type="submit" disabled={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-indigo-200 dark:shadow-none whitespace-nowrap">
+                            {isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Perbarui Nama'}
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </div>
-                  <form onSubmit={handleUpdateProfile} className="max-w-md">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Ubah Nama Tampilan</label>
-                    <div className="flex gap-3">
-                      <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} required className="flex-1 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" placeholder="Nama Panggilan" />
-                      <button type="submit" disabled={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-xl whitespace-nowrap">{isLoading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Simpan'}</button>
-                    </div>
-                  </form>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex justify-between items-center">
+                {/* 2. Tampilan Visual */}
+                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sm:p-8 flex justify-between items-center gap-4">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-palette text-indigo-500"></i> Tampilan Visual</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-palette text-indigo-500"></i> Mode Gelap (Dark Mode)</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Gunakan tema gelap agar lebih nyaman di mata saat malam hari.</p>
                   </div>
-                  <button onClick={() => setIsDarkMode(!isDarkMode)} className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                    <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isDarkMode ? 'translate-x-7' : 'translate-x-1'}`} />
+                  <button onClick={() => setIsDarkMode(!isDarkMode)} className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors duration-300 focus:outline-none ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                    <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-300 shadow-md ${isDarkMode ? 'translate-x-7' : 'translate-x-1'}`} />
                   </button>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+                {/* 3. Kelola Dompet */}
+                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sm:p-8">
                   <div className="mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-wallet text-indigo-500"></i> Kelola Dompet / Sumber Dana</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Tambahkan akun bank atau e-wallet.</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Tambahkan akun bank, e-wallet, atau laci uang tunai Anda.</p>
                   </div>
                   
-                  <form onSubmit={handleAddWallet} className="flex gap-3 mb-6">
-                    <input type="text" value={newWalletName} onChange={(e) => setNewWalletName(e.target.value)} required placeholder="Nama Dompet (Cth: Bank Jago)" className="flex-1 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" />
-                    <button type="submit" className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-medium py-2.5 px-6 rounded-xl whitespace-nowrap"><i className="fa-solid fa-plus mr-1"></i> Tambah</button>
+                  <form onSubmit={handleAddWallet} className="flex flex-col sm:flex-row gap-3 mb-6">
+                    <input type="text" value={newWalletName} onChange={(e) => setNewWalletName(e.target.value)} required placeholder="Nama Dompet (Cth: Bank Jago)" className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 transition-all" />
+                    <button type="submit" className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold py-3 px-6 rounded-xl transition-all whitespace-nowrap">
+                      <i className="fa-solid fa-plus mr-1.5"></i> Tambah
+                    </button>
                   </form>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2.5">
                     {(wallets || defaultWallets).map(w => (
-                      <span key={w} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                        <i className="fa-solid fa-wallet opacity-50"></i> {w} 
-                        {w !== 'Dompet Utama' && (wallets || defaultWallets).length > 1 && <button onClick={() => handleDeleteWallet(w)} className="text-indigo-400 hover:text-rose-500 ml-1"><i className="fa-solid fa-xmark"></i></button>}
-                      </span>
+                      <div key={w} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800 text-sm font-semibold text-indigo-700 dark:text-indigo-300 transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50">
+                        <i className="fa-solid fa-wallet opacity-50 text-xs"></i> 
+                        <span>{w}</span>
+                        {w !== 'Dompet Utama' && (wallets || defaultWallets).length > 1 && (
+                          <button onClick={() => handleDeleteWallet(w)} className="text-indigo-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 ml-1 p-1 rounded-md transition-colors flex items-center justify-center">
+                            <i className="fa-solid fa-xmark"></i>
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+                {/* 4. Kelola Kategori */}
+                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 sm:p-8">
                   <div className="mb-6">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-tags text-indigo-500"></i> Kelola Kategori</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Tambahkan atau hapus kategori transaksi sesuai gaya hidup Anda.</p>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2"><i className="fa-solid fa-tags text-indigo-500"></i> Kelola Kategori Transaksi</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Atur kategori pemasukan & pengeluaran sesuai gaya hidup Anda.</p>
                   </div>
                   
-                  <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3 mb-8">
-                    <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="w-full sm:w-auto px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
+                  <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3 mb-8 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                    <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="w-full sm:w-1/3 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500 transition-all">
                       <option value="expense">Pengeluaran</option>
                       <option value="income">Pemasukan</option>
                     </select>
-                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} required placeholder="Kategori baru (Cth: Beli Game)" className="flex-1 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500" />
-                    <button type="submit" className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-medium py-2.5 px-6 rounded-xl whitespace-nowrap"><i className="fa-solid fa-plus mr-1"></i> Tambah</button>
+                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} required placeholder="Kategori baru (Cth: Beli Game)" className="flex-1 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 transition-all" />
+                    <button type="submit" className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 font-bold py-3 px-6 rounded-xl transition-all whitespace-nowrap">
+                      <i className="fa-solid fa-plus mr-1.5"></i> Tambah
+                    </button>
                   </form>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                      <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 border-b border-slate-100 dark:border-slate-700 pb-2">Kategori Pengeluaran</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    {/* Kategori Pengeluaran */}
+                    <div className="bg-rose-50/50 dark:bg-rose-900/10 p-4 rounded-2xl border border-rose-100 dark:border-rose-900/20">
+                      <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-1.5"><i className="fa-solid fa-arrow-trend-up"></i> Daftar Pengeluaran</h4>
                       <div className="flex flex-wrap gap-2">
                         {(categories?.expense || defaultCategories.expense).map(cat => (
-                          <span key={cat} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300">
+                          <div key={cat} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300">
                             {cat} 
-                            {!defaultCategories.expense.includes(cat) && <button onClick={() => handleDeleteCategory(cat, 'expense')} className="text-slate-400 hover:text-rose-500 ml-1"><i className="fa-solid fa-xmark"></i></button>}
-                          </span>
+                            {!defaultCategories.expense.includes(cat) && (
+                              <button onClick={() => handleDeleteCategory(cat, 'expense')} className="text-slate-400 hover:text-rose-500 p-0.5 transition-colors"><i className="fa-solid fa-xmark"></i></button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 border-b border-slate-100 dark:border-slate-700 pb-2">Kategori Pemasukan</h4>
+                    {/* Kategori Pemasukan */}
+                    <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/20">
+                      <h4 className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-1.5"><i className="fa-solid fa-arrow-trend-down"></i> Daftar Pemasukan</h4>
                       <div className="flex flex-wrap gap-2">
                         {(categories?.income || defaultCategories.income).map(cat => (
-                          <span key={cat} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300">
+                          <div key={cat} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300">
                             {cat} 
-                            {!defaultCategories.income.includes(cat) && <button onClick={() => handleDeleteCategory(cat, 'income')} className="text-slate-400 hover:text-rose-500 ml-1"><i className="fa-solid fa-xmark"></i></button>}
-                          </span>
+                            {!defaultCategories.income.includes(cat) && (
+                              <button onClick={() => handleDeleteCategory(cat, 'income')} className="text-slate-400 hover:text-rose-500 p-0.5 transition-colors"><i className="fa-solid fa-xmark"></i></button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 p-6 mb-8">
-                  <h3 className="text-lg font-bold text-rose-700 dark:text-rose-400 mb-4 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> Manajemen Data & Keamanan</h3>
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Sinkronisasi Kalender (.ics)</p><p className="text-sm text-slate-500 dark:text-slate-400">Ekspor jadwal tenggat tabungan & pengingat cicilan bulan depan ke kalender Anda.</p></div>
-                      <button onClick={handleExportCalendar} className="mt-3 sm:mt-0 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-regular fa-calendar-plus mr-1.5"></i> Jadwal Kalender</button>
+                {/* 5. Keamanan & Manajemen Data */}
+                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-3xl border border-rose-200 dark:border-rose-900/30 p-6 sm:p-8 mb-8">
+                  <h3 className="text-lg font-bold text-rose-700 dark:text-rose-400 mb-6 flex items-center gap-2">
+                    <i className="fa-solid fa-triangle-exclamation"></i> Manajemen Data & Keamanan
+                  </h3>
+                  <div className="space-y-3">
+                    
+                    {/* Jadwal Kalender */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-2xl border border-rose-100 dark:border-rose-900/20 gap-4">
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Sinkronisasi Kalender (.ics)</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Ekspor jadwal tenggat tabungan & cicilan.</p>
+                      </div>
+                      <button onClick={handleExportCalendar} className="w-full sm:w-auto px-5 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex justify-center items-center gap-2">
+                        <i className="fa-regular fa-calendar-plus"></i> Ekspor ICS
+                      </button>
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Ekspor Data (CSV)</p><p className="text-sm text-slate-500 dark:text-slate-400">Unduh seluruh riwayat transaksi Anda untuk diolah di Excel.</p></div>
-                      <button onClick={handleExportCSV} className="mt-3 sm:mt-0 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-download mr-1.5"></i> Unduh Data</button>
+
+                    {/* Export CSV */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-2xl border border-rose-100 dark:border-rose-900/20 gap-4">
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Ekspor Data (CSV)</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Unduh riwayat transaksi untuk diolah di Excel.</p>
+                      </div>
+                      <button onClick={handleExportCSV} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex justify-center items-center gap-2">
+                        <i className="fa-solid fa-download"></i> Unduh CSV
+                      </button>
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-rose-100 dark:border-rose-900/50">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Hapus Seluruh Data</p><p className="text-sm text-slate-500 dark:text-slate-400">Menghapus semua riwayat transaksi. Tindakan ini permanen.</p></div>
-                      <button onClick={handleDeleteAll} className="mt-3 sm:mt-0 px-4 py-2 bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-200 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-trash-can mr-1.5"></i> Kosongkan Data</button>
+
+                    {/* Kosongkan Data */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-2xl border border-rose-200 dark:border-rose-900/50 gap-4">
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Hapus Seluruh Data</p>
+                        <p className="text-xs sm:text-sm text-rose-500 dark:text-rose-400 mt-1">Hapus riwayat permanen. Tidak bisa dibatalkan.</p>
+                      </div>
+                      <button onClick={handleDeleteAll} className="w-full sm:w-auto px-5 py-2.5 bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-200 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex justify-center items-center gap-2">
+                        <i className="fa-solid fa-trash-can"></i> Kosongkan
+                      </button>
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div><p className="font-medium text-slate-900 dark:text-white">Keluar Akun</p><p className="text-sm text-slate-500 dark:text-slate-400">Akhiri sesi Anda dari perangkat ini.</p></div>
-                      <button onClick={handleLogout} className="mt-3 sm:mt-0 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"><i className="fa-solid fa-right-from-bracket mr-1.5"></i> Keluar</button>
+
+                    {/* Logout */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-2xl border border-rose-100 dark:border-rose-900/20 gap-4 mt-4">
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Keluar Akun</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Akhiri sesi Anda dari perangkat ini.</p>
+                      </div>
+                      <button onClick={handleLogout} className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex justify-center items-center gap-2">
+                        <i className="fa-solid fa-right-from-bracket"></i> Keluar Sesi
+                      </button>
                     </div>
+
                   </div>
                 </div>
 
