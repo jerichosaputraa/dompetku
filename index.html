@@ -388,14 +388,27 @@
         if (!isLoggedIn || !user) return;
         const fetchData = async () => {
           setIsLoading(true);
-          try {
-            // MENGHAPUS order('created_at') KARENA KOLOM TIDAK ADA DI SUPABASE ANDA
-            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
-            if (txRes.error) console.error("Error load TX:", txRes.error);
-            if (txRes.data) setTransactions(txRes.data);
-            
-            const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-            if (svRes.data) setSavingsGoals(svRes.data || []); 
+          const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+          if (txRes.data) {
+            // Mengelompokkan transaksi per tanggal dan membalik urutannya
+            // Supabase secara default mengurutkan data dari yang terlama ke terbaru dalam 1 tanggal.
+            // Dengan cara ini, transaksi yang paling baru di hari yang sama akan berada di posisi teratas.
+            const grouped = {};
+            txRes.data.forEach(t => {
+              if (!grouped[t.date]) grouped[t.date] = [];
+              grouped[t.date].push(t);
+            });
+            const finalSorted = [];
+            Object.keys(grouped)
+              .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+              .forEach(d => {
+                finalSorted.push(...grouped[d].reverse());
+              });
+            setTransactions(finalSorted);
+          }
+          
+          const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+          if (svRes.data) setSavingsGoals(svRes.data || []); 
 
             const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
             if (instRes.data) setInstallments(instRes.data || []); 
