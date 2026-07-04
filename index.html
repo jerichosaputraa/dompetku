@@ -32,7 +32,6 @@
     
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // --- HELPER FUNCTIONS ---
     const formatRupiah = (number) => {
       const parsed = parseFloat(number);
       if (isNaN(parsed)) return 'Rp 0';
@@ -58,22 +57,6 @@
       const month = String(today.getMonth() + 1).padStart(2, '0');
       const day = String(today.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
-    };
-
-    // Fungsi Pengurutan Presisi (Tanggal + Waktu)
-    const sortTransactionsHelper = (txs) => {
-      return [...txs].sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA === dateB) {
-          // Jika di tanggal yang sama, urutkan berdasarkan waktu buat (terbaru di atas)
-          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-          if (timeA !== timeB) return timeB - timeA;
-          return 0; // Fallback jika kolom created_at tidak ada di Supabase
-        }
-        return dateB - dateA;
-      });
     };
 
     const terbilang = (nilai) => {
@@ -114,7 +97,6 @@
       }
     };
 
-    // --- GRAFIK DONAT ---
     function TransactionChart({ transactions, type, isDarkMode }) {
       const canvasRef = useRef(null);
       const chartRef = useRef(null);
@@ -165,7 +147,6 @@
       );
     }
 
-    // --- GRAFIK TREN ARUS KAS ---
     function CashflowLineChart({ transactions, filterMonth, filterYear, isDarkMode }) {
       const canvasRef = useRef(null);
       const chartRef = useRef(null);
@@ -241,9 +222,6 @@
       return <div className="h-64 w-full"><canvas ref={canvasRef}></canvas></div>;
     }
 
-    // ============================================================================
-    // KOMPONEN UTAMA (APP)
-    // ============================================================================
     function App() {
       // 1. Deklarasi Semua State Terlebih Dahulu
       const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -290,12 +268,10 @@
       const [savingsGoals, setSavingsGoals] = useState([]);
       const [goalTitle, setGoalTitle] = useState('');
       const [goalTarget, setGoalTarget] = useState('');
-      const [goalInitialAmount, setGoalInitialAmount] = useState(''); // Fitur "Sudah Terkumpul"
+      const [goalInitialAmount, setGoalInitialAmount] = useState('');
       const [goalDeadline, setGoalDeadline] = useState('');
       const [topUpModal, setTopUpModal] = useState({ isOpen: false, goalId: null, goalTitle: '', wallet: defaultWallets[0] });
       const [topUpAmount, setTopUpAmount] = useState('');
-      
-      // Fitur Penarikan Tabungan
       const [withdrawModal, setWithdrawModal] = useState({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: defaultWallets[0] });
       const [withdrawAmount, setWithdrawAmount] = useState('');
 
@@ -304,7 +280,7 @@
       const [instName, setInstName] = useState('');
       const [instTotalAmount, setInstTotalAmount] = useState('');
       const [instTenor, setInstTenor] = useState('');
-      const [instPaidMonths, setInstPaidMonths] = useState(''); // Fitur "Sudah Berjalan"
+      const [instPaidMonths, setInstPaidMonths] = useState(''); 
       const [instPayModal, setInstPayModal] = useState({ isOpen: false, instId: null, instName: '', amount: '', wallet: defaultWallets[0] });
 
       // State Acara & Trip
@@ -312,7 +288,6 @@
       const [newEventName, setNewEventName] = useState('');
       const [newEventBudget, setNewEventBudget] = useState('');
       const [selectedEventId, setSelectedEventId] = useState('');
-      
       const [trips, setTrips] = useState([]);
       const [newTripName, setNewTripName] = useState('');
       const [newTripBudget, setNewTripBudget] = useState('');
@@ -348,7 +323,6 @@
         else { document.documentElement.classList.remove('dark'); localStorage.setItem('darkMode', 'false'); }
       }, [isDarkMode]);
 
-      // FUNGSI NAVIGASI YANG DIPERBAIKI (TIDAK BOLEH DIHAPUS)
       const changeTab = (tabName) => {
         if (tabName !== activeTab) {
           window.history.pushState({ tab: tabName }, '', `#${tabName}`);
@@ -388,27 +362,29 @@
         if (!isLoggedIn || !user) return;
         const fetchData = async () => {
           setIsLoading(true);
-          const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
-          if (txRes.data) {
-            // Mengelompokkan transaksi per tanggal dan membalik urutannya
-            // Supabase secara default mengurutkan data dari yang terlama ke terbaru dalam 1 tanggal.
-            // Dengan cara ini, transaksi yang paling baru di hari yang sama akan berada di posisi teratas.
-            const grouped = {};
-            txRes.data.forEach(t => {
-              if (!grouped[t.date]) grouped[t.date] = [];
-              grouped[t.date].push(t);
-            });
-            const finalSorted = [];
-            Object.keys(grouped)
-              .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-              .forEach(d => {
+          try {
+            const txRes = await supabase.from('transactions').select('*').eq('user_email', user.email).order('date', { ascending: false });
+            if (txRes.data) {
+              // --- PENGURUTAN TERBARU DI ATAS (FIX) ---
+              // Mengelompokkan transaksi per tanggal dan membalik urutan asli database agar yang paling baru diinput (di hari yang sama) muncul di paling atas!
+              const grouped = {};
+              txRes.data.forEach(t => {
+                if (!grouped[t.date]) grouped[t.date] = [];
+                grouped[t.date].push(t);
+              });
+              
+              const finalSorted = [];
+              const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+              
+              sortedDates.forEach(d => {
                 finalSorted.push(...grouped[d].reverse());
               });
-            setTransactions(finalSorted);
-          }
-          
-          const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
-          if (svRes.data) setSavingsGoals(svRes.data || []); 
+              
+              setTransactions(finalSorted);
+            }
+            
+            const svRes = await supabase.from('savings_goals').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
+            if (svRes.data) setSavingsGoals(svRes.data || []); 
 
             const instRes = await supabase.from('installments').select('*').eq('user_email', user.email).order('created_at', { ascending: true });
             if (instRes.data) setInstallments(instRes.data || []); 
@@ -428,6 +404,11 @@
       }, [isLoggedIn, user]);
 
       // 3. Blok useMemo (Kalkulasi Data)
+      // Helper function untuk menjaga transaksi baru tetap di atas saat ditambahkan secara real-time
+      const sortTransactionsHelper = (txs) => {
+        return [...txs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      };
+
       const availableYears = useMemo(() => {
         const years = transactions.map(t => new Date(t.date).getFullYear()).filter(y => !isNaN(y));
         const uniqueYears = [...new Set(years)].sort((a, b) => b - a);
@@ -437,7 +418,7 @@
       }, [transactions]);
 
       const filteredTransactions = useMemo(() => {
-        const result = transactions.filter(t => {
+        return transactions.filter(t => {
           const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                 t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 (events.find(e => e.id === t.event_id)?.event_name || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -451,8 +432,6 @@
           
           return matchesSearch && matchesMonth && matchesYear && matchesWallet;
         });
-        // Pastikan hasil saringan di UI diurutkan secara presisi
-        return sortTransactionsHelper(result);
       }, [transactions, searchTerm, filterMonth, filterYear, filterWallet, events]);
 
       const { totalIncome, totalExpense } = useMemo(() => {
@@ -615,8 +594,12 @@
         });
       }, [splitTotals, splitPersons]);
 
+      // 5. Fungsi Handlers
+      const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+      };
 
-      // 5. Fungsi Handlers ANTI-STUCK (Dilengkapi Try-Catch-Finally)
       const loadCustomData = (email) => {
         try {
           const savedCats = localStorage.getItem(`finansialku_cats_${email}`);
@@ -664,11 +647,8 @@
             if (error) throw error;
             showToast('Berhasil masuk!', 'success');
           }
-        } catch (err) { 
-          showToast(err.message, 'error'); 
-        } finally {
-          setIsLoading(false);
-        }
+        } catch (err) { showToast(err.message, 'error'); }
+        setIsLoading(false);
       };
 
       const handleLogout = () => {
@@ -676,12 +656,8 @@
           title: "Keluar Akun?",
           message: "Anda akan keluar dari sesi saat ini.",
           onConfirm: async () => {
-            try {
-              await supabase.auth.signOut();
-              showToast("Berhasil keluar.");
-            } catch (err) {
-              showToast("Gagal keluar sesi", "error");
-            }
+            await supabase.auth.signOut();
+            showToast("Berhasil keluar.");
           }
         });
       };
@@ -689,15 +665,10 @@
       const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-        try {
-          const { data, error } = await supabase.auth.updateUser({ data: { name: profileName } });
-          if (error) showToast("Gagal memperbarui profil", "error");
-          else { setUser(data.user); showToast("Profil berhasil diperbarui!"); }
-        } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
-        } finally {
-          setIsLoading(false);
-        }
+        const { data, error } = await supabase.auth.updateUser({ data: { name: profileName } });
+        if (error) showToast("Gagal memperbarui profil", "error");
+        else { setUser(data.user); showToast("Profil berhasil diperbarui!"); }
+        setIsLoading(false);
       };
 
       const handleAddCategory = (e) => {
@@ -744,15 +715,10 @@
           message: "PERINGATAN: Seluruh riwayat transaksi Anda akan dihapus secara permanen. Tindakan ini tidak bisa dibatalkan!",
           onConfirm: async () => {
             setIsLoading(true);
-            try {
-              const { error } = await supabase.from('transactions').delete().eq('user_email', user?.email);
-              if (error) showToast("Gagal menghapus seluruh data.", "error");
-              else { setTransactions([]); showToast("Seluruh riwayat transaksi telah dikosongkan."); }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
-            } finally {
-              setIsLoading(false);
-            }
+            const { error } = await supabase.from('transactions').delete().eq('user_email', user.email);
+            if (error) showToast("Gagal menghapus seluruh data.", "error");
+            else { setTransactions([]); showToast("Seluruh riwayat transaksi telah dikosongkan."); }
+            setIsLoading(false);
           }
         });
       };
@@ -825,29 +791,17 @@
         const budget = parseFloat(newEventBudget.toString().replace(/\./g, ''));
         if (!newEventName || isNaN(budget)) return;
         setIsLoading(true);
-        try {
-          const { data, error } = await supabase.from('events').insert([{ event_name: newEventName, budget_limit: budget, user_email: user?.email }]).select();
-          if (error) { showToast("Gagal membuat acara. Cek SQL Editor Supabase!", "error"); } 
-          else if (data && data.length > 0) { 
-            setEvents([data[0], ...events]); setNewEventName(''); setNewEventBudget(''); showToast("Acara khusus berhasil dibuat!"); 
-          }
-        } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
-        } finally {
-          setIsLoading(false);
-        }
+        const { data, error } = await supabase.from('events').insert([{ event_name: newEventName, budget_limit: budget, user_email: user.email }]).select();
+        if (error) { showToast("Gagal membuat acara. Cek SQL Editor Supabase!", "error"); } else if (data) { setEvents([data[0], ...events]); setNewEventName(''); setNewEventBudget(''); showToast("Acara khusus berhasil dibuat!"); }
+        setIsLoading(false);
       };
 
       const handleDeleteEvent = (id) => {
         setConfirmAction({
           title: "Hapus Acara?", message: "Data anggaran acara ini akan dihapus permanen.",
           onConfirm: async () => {
-            try {
-              const { error } = await supabase.from('events').delete().eq('id', id);
-              if (!error) { setEvents(events.filter(e => e.id !== id)); showToast("Acara telah dihapus."); } else { showToast("Gagal menghapus acara.", "error"); }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
-            }
+            const { error } = await supabase.from('events').delete().eq('id', id);
+            if (!error) { setEvents(events.filter(e => e.id !== id)); showToast("Acara telah dihapus."); } else { showToast("Gagal menghapus acara.", "error"); }
           }
         });
       };
@@ -857,29 +811,17 @@
         const budget = parseFloat(newTripBudget.toString().replace(/\./g, ''));
         if (!newTripName || isNaN(budget) || !newTripDest || !newTripDate) return;
         setIsLoading(true);
-        try {
-          const { data, error } = await supabase.from('trips').insert([{ trip_name: newTripName, budget_limit: budget, destination: newTripDest, date: newTripDate, user_email: user?.email }]).select();
-          if (error) { showToast("Gagal membuat rencana.", "error"); } 
-          else if (data && data.length > 0) { 
-            setTrips([data[0], ...trips]); setNewTripName(''); setNewTripBudget(''); setNewTripDest(''); setNewTripDate(''); showToast("Rencana perjalanan baru berhasil dibuat!"); 
-          }
-        } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
-        } finally {
-          setIsLoading(false);
-        }
+        const { data, error } = await supabase.from('trips').insert([{ trip_name: newTripName, budget_limit: budget, destination: newTripDest, date: newTripDate, user_email: user.email }]).select();
+        if (error) { showToast("Gagal membuat rencana. Pastikan tabel trips sudah dibuat di Supabase!", "error"); } else if (data) { setTrips([data[0], ...trips]); setNewTripName(''); setNewTripBudget(''); setNewTripDest(''); setNewTripDate(''); showToast("Rencana perjalanan baru berhasil dibuat!"); }
+        setIsLoading(false);
       };
 
       const handleDeleteTrip = (id) => {
         setConfirmAction({
           title: "Hapus Rencana Perjalanan?", message: "Data rencana perjalanan ini akan dihapus permanen.",
           onConfirm: async () => {
-            try {
-              const { error } = await supabase.from('trips').delete().eq('id', id);
-              if (!error) { setTrips(trips.filter(t => t.id !== id)); showToast("Rencana perjalanan telah dihapus."); } else { showToast("Gagal menghapus rencana.", "error"); }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
-            }
+            const { error } = await supabase.from('trips').delete().eq('id', id);
+            if (!error) { setTrips(trips.filter(t => t.id !== id)); showToast("Rencana perjalanan telah dihapus."); } else { showToast("Gagal menghapus rencana.", "error"); }
           }
         });
       };
@@ -906,34 +848,23 @@
         const numericPaidMonths = parseInt(instPaidMonths) || 0;
         if (!instName || !numericTotal || !numericTenor) return;
         setIsLoading(true);
-        try {
-          // Kalkulasi uang yang sudah lunas di awal
-          const monthlyRec = Math.ceil(numericTotal / numericTenor);
-          const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
+        
+        // Kalkulasi uang yang sudah lunas di awal
+        const monthlyRec = Math.ceil(numericTotal / numericTenor);
+        const initialPaidAmount = Math.min(numericTotal, numericPaidMonths * monthlyRec);
 
-          const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: initialPaidAmount, tenor_months: numericTenor, user_email: user?.email };
-          const { data, error } = await supabase.from('installments').insert([newInst]).select();
-          if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } 
-          else if (data && data.length > 0) { 
-            setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); setInstPaidMonths(''); showToast("Cicilan baru berhasil dicatat!"); 
-          }
-        } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
-        } finally {
-          setIsLoading(false);
-        }
+        const newInst = { item_name: instName, total_amount: numericTotal, paid_amount: initialPaidAmount, tenor_months: numericTenor, user_email: user.email };
+        const { data, error } = await supabase.from('installments').insert([newInst]).select();
+        if (error) { showToast("Gagal! Pastikan tabel 'installments' sudah dibuat.", "error"); } else if (data) { setInstallments([...installments, data[0]]); setInstName(''); setInstTotalAmount(''); setInstTenor(''); setInstPaidMonths(''); showToast("Cicilan baru berhasil dicatat!"); }
+        setIsLoading(false);
       };
 
       const handleDeleteInstallment = (id) => {
         setConfirmAction({
           title: "Hapus Data Cicilan?", message: "Data cicilan ini akan dihapus dari daftar pantauan Anda.",
           onConfirm: async () => {
-            try {
-              const { error } = await supabase.from('installments').delete().eq('id', id);
-              if (error) showToast("Gagal menghapus cicilan!", "error"); else { setInstallments(installments.filter(i => i.id !== id)); showToast("Cicilan dihapus."); }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
-            }
+            const { error } = await supabase.from('installments').delete().eq('id', id);
+            if (error) showToast("Gagal menghapus cicilan!", "error"); else { setInstallments(installments.filter(i => i.id !== id)); showToast("Cicilan dihapus."); }
           }
         });
       };
@@ -955,19 +886,19 @@
           if (err1) { showToast("Gagal mengupdate progress cicilan.", "error"); return; }
           
           const txDate = getLocalDateString();
-          const newTx = { type: 'expense', amount: finalPayVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user?.email };
+          const newTx = { type: 'expense', amount: finalPayVal, description: `Bayar Cicilan: ${inst.item_name}`, category: 'Cicilan', date: txDate, wallet: instPayModal.wallet, user_email: user.email };
           const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
           
-          if (!err2) {
+          if (!err2 && txData) {
             setInstallments(installments.map(i => i.id === inst.id ? { ...i, paid_amount: newPaidAmount } : i));
-            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
+            setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setInstPayModal({ isOpen: false, instId: null, instName: '', amount: '', wallet: wallets[0] });
             showToast(`Berhasil bayar cicilan Rp ${formatInputNumber(finalPayVal.toString())}!`);
           } else {
-            showToast("Gagal mencatat transaksi pengeluaran.", "error");
+             showToast("Gagal mencatat mutasi pengeluaran cicilan.", "error");
           }
         } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
+          showToast("Terjadi kesalahan teknis.", "error");
         } finally {
           setIsLoading(false);
         }
@@ -979,40 +910,39 @@
       };
 
       const cancelEdit = () => {
-        setEditingTxId(null); setType('expense'); setAmount(''); setDescription(''); 
-        setCategory((categories?.expense || defaultCategories.expense)[0] || 'Lainnya'); 
-        setDate(getLocalDateString()); setSelectedEventId('');
+        setEditingTxId(null); setType('expense'); setAmount(''); setDescription(''); setCategory((categories?.expense || defaultCategories.expense)[0]); setDate(getLocalDateString()); setSelectedEventId('');
       };
 
       const handleSubmit = async (e) => {
         e.preventDefault();
         const numericAmount = parseFloat(amount.toString().replace(/\./g, ''));
         if (!numericAmount || !description || !category || !date || !selectedWallet) return;
-        
         setIsLoading(true);
+        
         try {
-          const txData = { type, amount: numericAmount, description, category, date, wallet: selectedWallet, user_email: user?.email, event_id: selectedEventId || null };
-          
+          const txData = { type, amount: numericAmount, description, category, date, wallet: selectedWallet, user_email: user.email, event_id: selectedEventId || null };
           if (editingTxId) {
             const { error } = await supabase.from('transactions').update(txData).eq('id', editingTxId);
-            if (error) { showToast("Gagal memperbarui data: " + error.message, "error"); } else {
+            if (error) { 
+              showToast("Gagal memperbarui data: " + error.message, "error"); 
+            } else {
               setTransactions(prev => sortTransactionsHelper(prev.map(t => t.id === editingTxId ? { ...t, ...txData } : t)));
-              showToast("Transaksi berhasil diperbarui!"); cancelEdit();
+              showToast("Transaksi berhasil diperbarui!"); 
+              cancelEdit();
             }
           } else {
             const { data, error } = await supabase.from('transactions').insert([txData]).select();
-            if (error) { showToast("Gagal menyimpan data: " + error.message, "error"); } 
-            else if (data && data.length > 0) {
+            if (error) { 
+              showToast("Gagal menyimpan data: " + error.message, "error"); 
+            } else if (data) {
               setTransactions(prev => sortTransactionsHelper([data[0], ...prev])); 
-              cancelEdit(); showToast("Transaksi berhasil dicatat!");
+              cancelEdit(); 
+              showToast("Transaksi berhasil dicatat!");
               if (type === 'income' && numericAmount >= 100000) setIncomeSplitter({ isOpen: true, amount: numericAmount });
-            } else {
-              cancelEdit(); showToast("Tersimpan (Perlu Muat Ulang)", "info");
             }
           }
         } catch (err) {
-          console.error(err);
-          showToast("Terjadi kesalahan sistem / koneksi.", "error");
+          showToast("Terjadi gangguan sistem.", "error");
         } finally {
           setIsLoading(false);
         }
@@ -1022,13 +952,9 @@
         setConfirmAction({
           title: "Hapus Transaksi?", message: "Data transaksi ini akan dihapus secara permanen.",
           onConfirm: async () => {
-            try {
-              const { error } = await supabase.from('transactions').delete().eq('id', id);
-              if (error) showToast("Gagal menghapus data! Cek izin Supabase.", "error"); else {
-                setTransactions(transactions.filter(t => t.id !== id)); showToast("Transaksi berhasil dihapus.");
-              }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
+            const { error } = await supabase.from('transactions').delete().eq('id', id);
+            if (error) showToast("Gagal menghapus data! Cek izin Supabase.", "error"); else {
+              setTransactions(transactions.filter(t => t.id !== id)); showToast("Transaksi berhasil dihapus.");
             }
           }
         });
@@ -1043,20 +969,25 @@
         setIsLoading(true);
         try {
           const newGoal = { 
-            title: goalTitle, target_amount: numericTarget, current_amount: numericInitial, 
-            deadline: goalDeadline || null, user_email: user?.email 
+              title: goalTitle, 
+              target_amount: numericTarget, 
+              current_amount: numericInitial, 
+              deadline: goalDeadline || null, 
+              user_email: user.email 
           };
+          
           const { data, error } = await supabase.from('savings_goals').insert([newGoal]).select();
-          if (error) showToast("Gagal membuat kantong tabungan!", "error"); 
-          else if (data && data.length > 0) {
+          if (error) {
+             showToast("Gagal membuat kantong tabungan!", "error"); 
+          } else if (data) {
             setSavingsGoals([...savingsGoals, data[0]]); 
             setGoalTitle(''); setGoalTarget(''); setGoalDeadline(''); setGoalInitialAmount(''); 
             showToast("Kantong tabungan berhasil dibuat!");
           }
         } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
+           showToast("Terjadi kesalahan teknis.", "error");
         } finally {
-          setIsLoading(false);
+           setIsLoading(false);
         }
       };
 
@@ -1064,13 +995,9 @@
         setConfirmAction({
           title: "Hapus Kantong Tabungan?", message: "Kantong tabungan ini akan dihapus. (Uang tidak akan kembali otomatis ke saldo utama)",
           onConfirm: async () => {
-            try {
-              const { error } = await supabase.from('savings_goals').delete().eq('id', id);
-              if (error) showToast("Gagal menghapus tabungan!", "error"); else {
-                setSavingsGoals(savingsGoals.filter(g => g.id !== id)); showToast("Kantong tabungan dihapus.");
-              }
-            } catch (err) {
-              showToast("Terjadi kesalahan sistem.", "error");
+            const { error } = await supabase.from('savings_goals').delete().eq('id', id);
+            if (error) showToast("Gagal menghapus tabungan!", "error"); else {
+              setSavingsGoals(savingsGoals.filter(g => g.id !== id)); showToast("Kantong tabungan dihapus.");
             }
           }
         });
@@ -1087,19 +1014,19 @@
           const { data: updatedData, error: err1 } = await supabase.from('savings_goals').update({ current_amount: newCurrent }).eq('id', goal.id).select();
           if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal memindahkan uang ke tabungan.", "error"); return; }
           const txDate = getLocalDateString();
-          const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: topUpModal.wallet, user_email: user?.email };
+          const newTx = { type: 'expense', amount: topUpVal, description: `Nabung: ${goal.title}`, category: 'Tabungan', date: txDate, wallet: topUpModal.wallet, user_email: user.email };
           const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
-          if (!err2) {
+          if (!err2 && txData) {
             setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
+            setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setTopUpModal({ isOpen: false, goalId: null, goalTitle: '', wallet: wallets[0] }); setTopUpAmount(''); showToast(`Berhasil nabung Rp ${formatInputNumber(topUpVal.toString())}!`);
           } else {
-            showToast("Nabung gagal dicatat ke riwayat.", "error");
+             showToast("Pencatatan riwayat gagal.", "error");
           }
         } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
+           showToast("Terjadi gangguan saat topup.", "error");
         } finally {
-          setIsLoading(false);
+           setIsLoading(false);
         }
       };
 
@@ -1122,22 +1049,22 @@
           if (err1 || (updatedData && updatedData.length === 0)) { showToast("Gagal menarik uang dari tabungan.", "error"); return; }
           
           const txDate = getLocalDateString();
-          const newTx = { type: 'income', amount: withdrawVal, description: `Pencairan: ${goal.title}`, category: 'Lainnya', date: txDate, wallet: withdrawModal.wallet, user_email: user?.email };
+          const newTx = { type: 'income', amount: withdrawVal, description: `Pencairan: ${goal.title}`, category: 'Lainnya', date: txDate, wallet: withdrawModal.wallet, user_email: user.email };
           const { data: txData, error: err2 } = await supabase.from('transactions').insert([newTx]).select();
           
-          if (!err2) {
+          if (!err2 && txData) {
             setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, current_amount: newCurrent } : g));
-            if(txData && txData.length > 0) setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
+            setTransactions(prev => sortTransactionsHelper([txData[0], ...prev]));
             setWithdrawModal({ isOpen: false, goalId: null, goalTitle: '', maxAmount: 0, wallet: wallets[0] }); 
             setWithdrawAmount(''); 
             showToast(`Berhasil mencairkan Rp ${formatInputNumber(withdrawVal.toString())} ke ${withdrawModal.wallet}!`);
           } else {
-             showToast("Pencairan gagal dicatat.", "error");
+             showToast("Pencatatan pencairan gagal.", "error");
           }
         } catch (err) {
-          showToast("Terjadi kesalahan sistem.", "error");
+           showToast("Terjadi kesalahan teknis.", "error");
         } finally {
-          setIsLoading(false);
+           setIsLoading(false);
         }
       };
 
@@ -2486,7 +2413,7 @@
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-white dark:bg-slate-800 rounded-2xl border border-rose-100 dark:border-rose-900/20 gap-4">
                       <div>
                         <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Sinkronisasi Kalender (.ics)</p>
-                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Ekspor jadwal tenggat tabungan & cicilan.</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Ekspor jadwal tenggat tabungan & pengingat cicilan bulan depan ke kalender Anda.</p>
                       </div>
                       <button onClick={handleExportCalendar} className="w-full sm:w-auto px-5 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 rounded-xl font-bold text-sm transition-colors whitespace-nowrap flex justify-center items-center gap-2">
                         <i className="fa-regular fa-calendar-plus"></i> Ekspor ICS
